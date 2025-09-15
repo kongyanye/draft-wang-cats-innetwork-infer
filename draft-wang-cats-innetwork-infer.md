@@ -30,11 +30,13 @@ author:
     fullname: "Hanling Wang"
     organization: Pengcheng Laboratory
     email: "wanghl03@pcl.ac.cn"
- 
+    
+ -
     fullname: "Qing Li"
     organization: Pengcheng Laboratory
     email: "liq@pcl.ac.cn"
- 
+    
+ -
     fullname: "Yong Jiang"
     organization: Tsinghua Shenzhen International Graduate School, Pengcheng Laboratory
     email: "jiangy@sz.tsinghua.edu.cn"
@@ -72,7 +74,7 @@ This document outlines the motivation, problem statement, and architectural cons
 
 * **Latency bottlenecks:** Large model inference may exceed the latency tolerance of interactive applications if computed only at edge or cloud.
 * **Resource fragmentation:** Heterogeneous resources (edge GPUs, in-network accelerators, cloud clusters) are not effectively coordinated.
-* **Lack of steering semantics:** Existing approaches to service steering are not optimized for inference workload partitioning and scheduling.  
+* **Lack of steering semantics:** Existing approaches to service steering are not optimized for inference workload partitioning and scheduling.
 
 # Proposed Approach
 
