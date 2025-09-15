@@ -1,8 +1,8 @@
-<!-- regenerate: on (set to off if you edit this file) -->
+<!-- regenerate: off (set to off if you edit this file) -->
 
-# TODO - Your title
+# In-Network Intelligence for Distributed Collaborative Inference Acceleration
 
-This is the working area for the individual Internet-Draft, "TODO - Your title".
+This is the working area for the individual Internet-Draft, "In-Network Intelligence for Distributed Collaborative Inference Acceleration".
 
 * [Editor's Copy](https://kongyanye.github.io/draft-wang-cats-innetwork-infer/#go.draft-wang-cats-innetwork-infer.html)
 * [Datatracker Page](https://datatracker.ietf.org/doc/draft-wang-cats-innetwork-infer)
