@@ -90,7 +90,7 @@ The framework for DCIA includes the following:
 3. **Task Scheduling and Steering**
    Extend service capability advertisements with inference-oriented metrics (e.g., GPU/FPGA availability, model version, layer compatibility), and dynamically balance inference tasks across heterogeneous resources.
 
-4. **Load Balancing Protocols**  
+4. **Load Balancing Protocols**
    Support task redirection and failover when a device becomes overloaded, and explore transport-level extensions to allow adaptive task splitting along paths.
 
 # Use Cases
