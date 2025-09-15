@@ -70,22 +70,22 @@ This document outlines the motivation, problem statement, and architectural cons
 
 # Problem Statement
 
-* **Latency bottlenecks:** Large model inference may exceed the latency tolerance of interactive applications if computed only at edge or cloud.  
-* **Resource fragmentation:** Heterogeneous resources (edge GPUs, in-network accelerators, cloud clusters) are not effectively coordinated.  
+* **Latency bottlenecks:** Large model inference may exceed the latency tolerance of interactive applications if computed only at edge or cloud.
+* **Resource fragmentation:** Heterogeneous resources (edge GPUs, in-network accelerators, cloud clusters) are not effectively coordinated.
 * **Lack of steering semantics:** Existing approaches to service steering are not optimized for inference workload partitioning and scheduling.  
 
 # Proposed Approach
 
 The framework for DCIA includes the following:
 
-1. **Model Partitioning and Mapping**  
+1. **Model Partitioning and Mapping**
    Split large models into sub-tasks (e.g., early layers at edge, mid layers in-network, final layers in cloud) and map them based on
    node capabilities, load, and network conditions.
 
-2. **In-Network Execution**  
+2. **In-Network Execution**
    Enable inference acceleration in programmable switches, FPGAs, or SmartNICs, utilizing data-plane programmability to process features in transit (e.g., feature extraction, embedding computation).
 
-3. **Task Scheduling and Steering**  
+3. **Task Scheduling and Steering**
    Extend service capability advertisements with inference-oriented metrics (e.g., GPU/FPGA availability, model version, layer compatibility), and dynamically balance inference tasks across heterogeneous resources.
 
 4. **Load Balancing Protocols**  
@@ -96,7 +96,7 @@ The framework for DCIA includes the following:
 * **Video Analytics:** Smart cameras extract features locally, switches perform intermediate tensor transformations, and cloud servers handle
   complex classification.
 * **Autonomous Vehicles:** Onboard processors execute lightweight inference, roadside units conduct mid-layer fusion, and cloud clusters
-  finalize planning decisions.  
+  finalize planning decisions.
 * **Interactive AI Services:** Edge devices handle pre-processing, in-network resources accelerate embeddings, and cloud models provide
   final responses.
 
@@ -109,9 +109,9 @@ The framework for DCIA includes the following:
 
 Inference partitioning must consider:
 
-* **Data confidentiality**, ensuring sensitive inputs are not exposed in untrusted network elements.  
-* **Model integrity**, preventing tampering or unauthorized reuse of model partitions.  
-* **Policy enforcement**, allowing operators to specify where inference may or may not occur.  
+* **Data confidentiality**, ensuring sensitive inputs are not exposed in untrusted network elements.
+* **Model integrity**, preventing tampering or unauthorized reuse of model partitions.
+* **Policy enforcement**, allowing operators to specify where inference may or may not occur.
 
 
 # IANA Considerations
