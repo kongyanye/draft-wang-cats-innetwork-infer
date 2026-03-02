@@ -3,7 +3,7 @@ title: "An Open, Decentralized, and Scalable Framework for Large Language Model 
 abbrev: "ODSI"
 category: info
 
-docname: draft-wang-cats-innetwork-infer-latest
+docname: draft-wang-cats-odsi-latest
 submissiontype: IETF  # also: "independent", "editorial", "IAB", or "IRTF"
 number:
 date:
@@ -21,8 +21,8 @@ venue:
   type: "Working Group"
   mail: "cats@ietf.org"
   arch: "https://mailarchive.ietf.org/arch/browse/cats/"
-  github: "kongyanye/draft-wang-cats-innetwork-infer"
-  latest: "https://kongyanye.github.io/draft-wang-cats-innetwork-infer/draft-wang-cats-innetwork-infer.html"
+  github: "kongyanye/draft-wang-cats-odsi"
+  latest: "https://kongyanye.github.io/draft-wang-cats-odsi/draft-wang-cats-odsi.html"
 
 author:
  -
