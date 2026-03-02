@@ -1,0 +1,2309 @@
+<!DOCTYPE html>
+<html lang="en" class="Internet-Draft">
+<head>
+<meta charset="utf-8">
+<meta content="Common,Latin" name="scripts">
+<meta content="initial-scale=1.0" name="viewport">
+<title>An Open, Decentralized, and Scalable Framework for Large Language Model Inference</title>
+<meta content="Hanling Wang" name="author">
+<meta content="Qing Li" name="author">
+<meta content="Yong Jiang" name="author">
+<meta content="Mingwei Xu" name="author">
+<meta content="
+       Large Language Model (LLM) inference is increasingly deployed as a networked service, yet existing deployments rely primarily on centralized infrastructure and trusted operators. Such designs limit openness, concentrate resource ownership, and constrain scalability to the capacity of individual providers. At the same time, LLM inference introduces execution characteristics (e.g., strict sequential dependencies, large intermediate activations, and tight latency requirements) that are not well supported by existing network, transport, or coordination mechanisms in open environments. 
+       This document specifies an open, decentralized, and scalable framework for executing LLM inference across independently operated and mutually untrusted participants. The framework treats inference as a distributed, layer-wise execution process subject to explicit deadlines, rather than as a monolithic computation or best-effort service. It combines layer-aware activation transport and routing, decentralized coordination among heterogeneous compute resources, and security mechanisms that provide accountability and correctness without assuming trusted execution. 
+       This document focuses on the architectural framework, design rationale, problem definition, challenges, and solution space of the Open, Decentralized, and Scalable Inference framework (ODSI). It does not specify concrete wire protocols, message formats, or protocol state machines. Such protocol-level specifications are to be defined in separate documents that build upon the framework described herein. 
+    " name="description">
+<meta content="xml2rfc 3.31.0" name="generator">
+<meta content="deep learning inference" name="keyword">
+<meta content="distributed system" name="keyword">
+<meta content="decentralized network" name="keyword">
+<meta content="draft-wang-cats-odsi-latest" name="ietf.draft">
+<!-- Generator version information:
+  xml2rfc 3.31.0
+    Python 3.12.12
+    ConfigArgParse 1.7
+    google-i18n-address 3.1.1
+    intervaltree 3.2.1
+    Jinja2 3.1.6
+    lxml 6.0.2
+    platformdirs 4.5.1
+    pycountry 24.6.1
+    PyYAML 6.0.3
+    requests 2.32.5
+    wcwidth 0.3.0
+-->
+<link href="draft-wang-cats-odsi.xml" rel="alternate" type="application/rfc+xml">
+<link href="#copyright" rel="license">
+<style type="text/css">@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-cyrillic.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-cyrillic.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: local('Lora SemiBold'), local('Lora-SemiBold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-semibold-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Oxygen Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Oxygen Mono'), local('OxygenMono-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/oxygenmono-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Oxygen Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Oxygen Mono'), local('OxygenMono-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/oxygenmono-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+}
+
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: light dark;
+  --background-color: #fff;
+  --text-color: #222;
+  --title-color: #191919;
+  --link-color: #2a6496;
+  --highlight-color: #f9f9f9;
+  --line-color: #eee;
+  --pilcrow-weak: #ddd;
+  --pilcrow-strong: #bbb;
+  --small-font-size: 14.5px;
+  --font-mono: 'Oxygen Mono', monospace;
+  --font-title: "Sofia Sans Semi Condensed", sans-serif;
+  scrollbar-color: #bbb #eee;
+}
+body {
+  max-width: 600px;
+  margin: 75px auto;
+  padding: 0 5px;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  font: 16px/22px "Lora", serif;
+  scroll-behavior: smooth;
+}
+
+.ears {
+  display: none;
+}
+
+/* headings */
+section {
+  clear: both;
+}
+.section-number {
+  padding-right: 0.5em;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-title);
+  font-weight: 680;
+  margin: 0.8em 0 0.3em;
+  font-size-adjust: 0.5;
+  color: var(--title-color);
+}
+h1#title {
+  font-size: 32px;
+  line-height: 40px;
+  clear: both;
+}
+h1#title, h1#rfcnum {
+  margin: 1.5em 0 0.2em;
+}
+h1#rfcnum + h1#title {
+  margin: 0.2em 0;
+}
+
+h1, h2, h3 {
+  font-size: 22px;
+  line-height: 27px;
+}
+h4, h5, h6 {
+  font-size: 20px;
+  line-height: 24px;
+}
+
+/* general structure */
+.author {
+  padding-bottom: 0.3em;
+  vertical-align: top;
+}
+#abstract+p {
+  font-size: 18px;
+  line-height: 24px;
+}
+#abstract+p code, #abstract+p samp, #abstract+p tt {
+  font-size: 16px;
+  line-height: 0;
+}
+
+p {
+  padding: 0;
+  margin: 0.5em 0;
+  text-align: left;
+}
+div {
+  margin: 0;
+}
+.alignRight.art-text {
+  background-color: var(--highlight-color);
+  border: 1px solid var(--line-color);
+  border-radius: 3px;
+  padding: 0.5em 1em 0;
+  margin-bottom: 0.5em;
+}
+.alignRight.art-text pre {
+  padding: 0;
+  width: auto;
+}
+.alignRight {
+  margin: 1em 0;
+}
+.alignRight > *:first-child {
+  border: none;
+  margin: 0;
+  float: right;
+  clear: both;
+}
+.alignRight > *:nth-child(2) {
+  clear: both;
+  display: block;
+  border: none;
+}
+svg {
+  display: block;
+}
+/* font-family isn't space-separated, but =~ will have to do */
+svg[font-family~="monospace" i], svg [font-family~="monospace" i] {
+  font-family: var(--font-mono);
+}
+.alignCenter.art-text {
+  background-color: var(--highlight-color);
+  border: 1px solid var(--line-color);
+  border-radius: 3px;
+  padding: 0.5em 1em 0;
+  margin-bottom: 0.5em;
+}
+.alignCenter.art-text pre {
+  padding: 0;
+  width: auto;
+}
+.alignCenter {
+  margin: 1em 0;
+}
+.alignCenter > *:first-child {
+  border: none;
+  /* this isn't optimal, but it's an existence proof.  PrinceXML doesn't
+     support flexbox yet.
+  */
+  display: table;
+  margin: 0 auto;
+}
+
+/* lists */
+ol, ul {
+  padding: 0;
+  margin: 0 0 0.5em 2em;
+  & :is(ol, ul) {
+    margin-left: 1em;
+  }
+}
+li {
+  margin: 0 0 0.25em 0;
+}
+ul.empty, .ulEmpty {
+  list-style-type: none;
+  & li {
+    margin-top: 0.5em;
+  }
+}
+:is(ul, ol).compact, .ulCompact, .olCompact {
+  margin: 0 0 0 2em;
+  & li {
+    margin: 0;
+    & :first-child { margin-top: 0; }
+    & :last-child { margin-bottom: 0; }
+  }
+}
+
+/* definition lists */
+dl {
+  clear: left;
+  --indent: 3ch;
+  /* --indent: attr(indent ch); not supported in any browser, but we can dream */
+  &.olPercent {
+    --indent: 5ch;
+    & > dt {
+      min-width: calc(var(--indent) - 2ch);
+    }
+  }
+  &.olPercent > dt {
+    float: none;
+  }
+
+  dl > dd > & {
+    margin-top: 0.5em;
+    margin-bottom: 0;
+  }
+}
+dl:not(.dlNewline) > dt {
+  float: left;
+  margin-right: 2ch;
+  min-width: 8ch;
+}
+dl > dd {
+  margin-bottom: .8em;
+  margin-left: var(--indent) !important; /* stupid element overrides */
+  min-height: 2ex;
+}
+:is(dl.compact, .dlCompact) > dd {
+  margin-bottom: 0;
+  & > :is(:first-child, .break:first-child + *) {
+    margin-top: 0;
+  }
+  & > :is(:last-child) {
+    margin-bottom: 0;
+  }
+}
+:is(dd, span).break {
+  display: none;
+}
+
+/* links */
+a, a[href].selfRef:hover {
+  text-decoration: none;
+}
+a[href] {
+  color: var(--link-color);
+}
+a[href].selfRef, .iref + a[href].internal {
+  color: var(--text-color);
+}
+a[href]:hover {
+  text-decoration: underline;
+}
+a[href].selfRef:hover {
+  background-color: var(--highlight-color);
+}
+a.xref:is(.cite, .auto), :is(#status-of-memo, #copyright) a {
+  white-space: nowrap;
+}
+
+/* Figures */
+tt, code, pre {
+  background-color: var(--highlight-color);
+  font: 14px/22px var(--font-mono);
+}
+tt, code {
+  /* changing the font for inline elements leads to different ascender
+     and descender heights; as we want to retain baseline alignment,
+     remove leading to avoid altering the final height of lines
+     note: this fails if these blocks take an entire line,
+     a different solution would be great */
+  line-height: 0;
+}
+:is(h1, h2, h3, h4, h5, h6) :is(tt, code) {
+  font-size: 84%;
+}
+pre {
+  border: 1px solid var(--line-color);
+  font-size: 13.5px;
+  line-height: 16px;
+  letter-spacing: -0.2px;
+  margin: 5px;
+  padding: 5px;
+}
+img {
+  max-width: 100%;
+}
+figure {
+  margin: 0.5em 0;
+  padding: 0;
+}
+figure blockquote {
+  margin: 0.8em 0.4em 0.4em;
+}
+figcaption, caption {
+  font-style: italic;
+  margin: 0.5em 1.5em;
+  text-align: left;
+  caption-side: bottom;
+}
+@media screen {
+  /* Auto-collapse boilerplate. */
+  :is(#status-of-memo, #copyright) p {
+    margin: -2px 0;
+    max-height: 0;
+    transition: max-height 2s ease, margin 0.5s ease 0.5s;
+    overflow: hidden;
+  }
+  :is(#status-of-memo, #copyright):hover p,
+  :is(#status-of-memo, #copyright) h2:target ~ p {
+    margin: 0.5em 0;
+    max-height: 500px;
+    overflow: auto;
+  }
+  pre, svg {
+    display: inline-block;
+    /* In the horizontal direction, sometimes people make over-sized figures.
+       Scrollbars for those is therefore necessary: auto adds them as necessary..
+       In the vertical direction, the line-height can combine with the font
+       asender/descender height to produce scrollbars: hidden avoids that. */
+    overflow: auto hidden;
+  }
+  pre {
+    max-width: 100%;
+    width: calc(100% - 22px - 1em);
+  }
+  svg {
+    max-width: calc(100% - 22px - 1em);
+  }
+  figure pre {
+    display: block;
+    width: calc(100% - 25px);
+  }
+  :is(pre, svg) + .pilcrow {
+    display: inline-block;
+    vertical-align: text-bottom;
+    padding-bottom: 8px;
+  }
+}
+
+/* aside, blockquote */
+aside, blockquote {
+  margin-left: 0;
+  padding: 0 2em;
+  font-style: italic;
+}
+blockquote {
+  margin: 1em 0;
+  border-left: 2px var(--pilcrow-strong) solid;
+}
+cite {
+  display: block;
+  text-align: right;
+  font-style: italic;
+}
+
+/* tables */
+table {
+  width: auto;
+  max-width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+}
+table.right {
+  margin-left: auto;
+}
+table.center {
+  margin-left: auto;
+  margin-right: auto;
+}
+table.left {
+  margin-right: auto;
+}
+table .text-left {
+  text-align: left;
+}
+table .text-center {
+  text-align: center;
+}
+table .text-right {
+  text-align: right;
+}
+
+thead, tbody {
+  border: 1px solid var(--line-color);
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 5px 10px;
+}
+th {
+  background-color: var(--line-color);
+}
+:is(tr:nth-child(2n), thead+tbody > tr:nth-child(2n+1)) > td {
+  background-color: var(--background-color);
+}
+:is(tr:nth-child(2n+1), thead+tbody > tr:nth-child(2n)) > td {
+  background-color: var(--highlight-color);
+}
+table caption {
+  margin: 0;
+  padding: 3px 0 3px 1em;
+}
+table p {
+  margin: 0;
+}
+
+/* pilcrow */
+a.pilcrow {
+  margin-left: 3px;
+  opacity: 0.2;
+  user-select: none;
+  &[href] {
+    color: var(--pilcrow-weak);
+    &:hover { text-decoration: none; }
+  }
+}
+@media not print {
+  :hover > a.pilcrow, a.pilcrow:focus {
+    opacity: 1;
+  }
+  a.pilcrow[href]:hover {
+    color: var(--pilcrow-strong);
+    background-color: transparent;
+  }
+}
+@media print {
+  a.pilcrow {
+    display: none;
+  }
+}
+
+/* misc */
+hr {
+  border: 0;
+  border-top: 1px solid var(--line-color);
+}
+.bcp14 {
+  font-variant: small-caps;
+  font-weight: 600;
+  font-size: var(--small-font-size);
+}
+.role {
+  font-variant: all-small-caps;
+}
+sub, sup {
+  line-height: 1;
+  font-size: 80%;
+}
+
+/* info block */
+#identifiers {
+  margin: 0;
+  font-size: var(--small-font-size);
+  line-height: 18px;
+  --identifier-width: 15ch;
+  & dt {
+    width: var(--identifier-width);
+    min-width: var(--identifier-width);
+    clear: left;
+    float: left;
+    text-align: right;
+    margin-right: 1ch;
+  }
+  & dd {
+    margin: 0;
+    margin-left: calc(1em + var(--identifier-width)) !important;
+    min-width: 5em;
+  }
+  & .authors {
+    & .author {
+      display: inline-block;
+      margin-right: 1.5em;
+    }
+    & .org {
+      font-style: italic;
+    }
+  }
+}
+
+/* The prepared/rendered info at the very bottom of the page */
+.docInfo {
+  color: #999;
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2em;
+}
+.docInfo .prepared {
+  float: right;
+}
+
+/* table of contents */
+#toc {
+  padding: 0.75em 0 2em 0;
+  margin-bottom: 1em;
+
+  & nav {
+    & ul {
+      margin: 0 0.5em 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    & li {
+      line-height: 1.3em;
+      margin: 2px 0;
+      padding-left: 1.2em;
+      text-indent: -1.2em;
+    }
+  }
+  & a.xref {
+    white-space: normal;
+  }
+}
+
+.references {
+  & > dt {
+    text-align: right;
+    font-weight: bold;
+    min-width: 10ch;
+    margin-right: 1.5ch;
+    &:target::before {
+      content: "⇒";
+      margin: 0 10px 0 -25px;
+    }
+  }
+  & > dd {
+    margin-left: 12ch !important;
+    overflow: visible;
+    & .refInstance {
+      margin-bottom: 0.8em;
+    }
+    & .ascii {
+      margin-bottom: 0.25em;
+    }
+  }
+}
+
+#rfc\.index\.index + ul {
+  margin-left: 0;
+}
+
+/* authors */
+address.vcard {
+  font-style: normal;
+  max-width: 20em;
+  margin: 1em auto 1em 0;
+
+  & .nameRole {
+    font-weight: 700;
+    margin-left: 0;
+  }
+  & .label {
+    margin: 0.5em 0;
+  }
+  & .type {
+    display: none;
+  }
+  & .alternative-contact {
+    margin: 0.5em 0 0.25em 0;
+  }
+  & .non-ascii {
+    margin: 0 0 0 2em;
+  }
+  & div.left {
+    text-align: left;
+  }
+  & div.right {
+    text-align: right;
+  }
+}
+
+hr.addr {
+  border-top: 1px dashed;
+  margin: 0;
+  color: #ddd;
+  max-width: calc(100% - 16px);
+}
+@media (min-width: 500px) {
+  #authors-addresses > section {
+    column-count: 2;
+    column-gap: 20px;
+  }
+  #authors-addresses > section > h2 {
+    column-span: all;
+  }
+  /* hack for break-inside: avoid-column */
+  #authors-addresses address {
+    display: inline-block;
+    break-inside: avoid-column;
+  }
+}
+
+/* Comments */
+.rfcEditorRemove p:first-of-type {
+  font-style: italic;
+}
+.cref {
+  background-color: rgba(249, 232, 105, 0.3);
+  padding: 2px 4px;
+}
+.crefSource {
+  font-style: italic;
+}
+
+@media screen {
+  #toc nav {
+    font-family: var(--font-title);
+    font-weight: 360;
+    & > ul { margin-bottom: 2em; }
+    & ul {
+      margin: 0 0 0 4px;
+      & :is(p, li) {
+        margin: 2px 0;
+      }
+    }
+  }
+  #toc a.toplink {
+    float: right;
+  }
+}
+@media not screen {
+  #toc a.toplink {
+    display: none;
+  }
+}
+
+
+/* TOC layout for smaller screens */
+@media screen and (max-width: 929px) {
+  #toc {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    padding: 1px 0 0 0;
+    margin: 0;
+    border-bottom: 1px solid #ccc;
+    opacity: 0.6;
+  }
+  #toc h2 {
+    margin: 0;
+    padding: 2px 0 2px 6px;
+    padding-right: 1em;
+    font-size: 18px;
+    line-height: 24px;
+    min-width: 190px;
+    text-align: right;
+    background-color: #444;
+    color: white;
+    cursor: pointer;
+    &::before { /* css hamburger */
+      float: right;
+      position: relative;
+      width: 1em;
+      height: 1px;
+      left: -164px;
+      margin: 8px 0 0 0;
+      background: white none repeat scroll 0 0;
+      box-shadow: 0 4px 0 0 white, 0 8px 0 0 white;
+      content: "";
+    }
+  }
+  #toc nav {
+    display: none;
+    background-color: var(--background-color);
+    padding: 0.5em 1em 1em;
+    overflow: auto;
+    overscroll-behavior: contain;
+    height: calc(100vh - 48px);
+    border-left: 1px solid #ddd;
+  }
+  #toc.active {
+    opacity: 1;
+    & nav { display: block; }
+  }
+  /* Make the collapsed ToC header render white on gray also when it's a link */
+  #toc h2 a,
+  #toc h2 a:is(:link, :focus, :hover),
+  #toc a.toplink,
+  #toc a.toplink:hover {
+    color: white;
+    background-color: #444;
+    text-decoration: none;
+  }
+  #toc a.toplink {
+    margin: 2px 0.5em 0;
+  }
+}
+
+/* TOC layout for wide screens */
+@media screen and (min-width: 930px) {
+  body {
+    padding-right: 360px;
+    padding-right: calc(min(180px + 20%, 500px));
+  }
+  #toc {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    right: calc(50vw - 480px);
+    width: 312px;
+    margin: 0;
+    padding: 0;
+    z-index: 1;
+  }
+  #toc h2 {
+    margin: 0;
+    padding: 0.25em 1em 1em 0;
+  }
+  #toc nav {
+    display: block;
+    height: calc(90vh - 84px);
+    bottom: 0;
+    padding: 0.5em 0 2em;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  img { /* future proofing */
+    max-width: 100%;
+    height: auto;
+  }
+  #toc a.toplink {
+    margin: 8px 0.5em 0;
+  }
+}
+
+/* pagination */
+@media print {
+  body {
+    width: 100%;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+  #n-copyright-notice {
+    border-bottom: none;
+  }
+  #toc, #n-introduction {
+    page-break-before: always;
+  }
+  #toc {
+    border-top: none;
+    padding-top: 0;
+  }
+  figure, pre, .vcard {
+    page-break-inside: avoid;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  :is(h2, h3, h4, h5, h6)+*, dd {
+    page-break-before: avoid;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 10pt;
+  }
+  table {
+    border: 1px solid #ddd;
+  }
+  td {
+    border-top: 1px solid #ddd;
+  }
+}
+
+@page :first {
+  padding-top: 0;
+  @top-left {
+    content: normal;
+    border: none;
+  }
+  @top-center {
+    content: normal;
+    border: none;
+  }
+  @top-right {
+    content: normal;
+    border: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin-bottom: 45mm;
+  padding-top: 20px;
+}
+
+/* Dark mode. */
+@media (prefers-color-scheme: dark) {
+:root {
+  --background-color: #121212;
+  --text-color: #f0f0f0;
+  --title-color: #fff;
+  --link-color: #4da4f0;
+  --highlight-color: #282828;
+  --line-color: #444;
+  --pilcrow-weak: #444;
+  --pilcrow-strong: #666;
+  scrollbar-color: #777 #333;
+}
+}
+
+/* SVG Trick: a prefix match works because only black and white are allowed */
+svg :is([stroke="black"], [stroke^="#000"]) {
+  stroke: var(--text-color);
+}
+svg :is([stroke="white"], [stroke^="#fff"]) {
+  stroke: var(--background-color);
+}
+svg :is([fill="black"], [fill^="#000"], :not([fill])) {
+  fill: var(--text-color);
+}
+svg :is([fill="white"], [fill^="#fff"]) {
+  fill: var(--background-color);
+}
+</style>
+
+</head>
+<body class="xml2rfc">
+<table class="ears">
+<thead><tr>
+<td class="left">Internet-Draft</td>
+<td class="center">ODSI</td>
+<td class="right">March 2026</td>
+</tr></thead>
+<tfoot><tr>
+<td class="left">Wang, et al.</td>
+<td class="center">Expires 3 September 2026</td>
+<td class="right">[Page]</td>
+</tr></tfoot>
+</table>
+<div id="external-metadata" class="document-information"></div>
+<div id="internal-metadata" class="document-information">
+<dl id="identifiers">
+<dt class="label-workgroup">Workgroup:</dt>
+<dd class="workgroup">Computing-Aware Traffic Steering</dd>
+<dt class="label-internet-draft">Internet-Draft:</dt>
+<dd class="internet-draft">draft-wang-cats-odsi-latest</dd>
+<dt class="label-published">Published:</dt>
+<dd class="published">
+<time datetime="2026-03-02" class="published">2 March 2026</time>
+    </dd>
+<dt class="label-intended-status">Intended Status:</dt>
+<dd class="intended-status">Informational</dd>
+<dt class="label-expires">Expires:</dt>
+<dd class="expires"><time datetime="2026-09-03">3 September 2026</time></dd>
+<dt class="label-authors">Authors:</dt>
+<dd class="authors">
+<div class="author">
+      <div class="author-name">H. Wang</div>
+<div class="org">Pengcheng Laboratory</div>
+</div>
+<div class="author">
+      <div class="author-name">Q. Li</div>
+<div class="org">Pengcheng Laboratory</div>
+</div>
+<div class="author">
+      <div class="author-name">Y. Jiang</div>
+<div class="org">Tsinghua Shenzhen International Graduate School &amp; Pengcheng Laboratory</div>
+</div>
+<div class="author">
+      <div class="author-name">M. Xu</div>
+<div class="org">Tsinghua University</div>
+</div>
+</dd>
+</dl>
+</div>
+<h1 id="title">An Open, Decentralized, and Scalable Framework for Large Language Model Inference</h1>
+<section id="section-abstract">
+      <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
+<p id="section-abstract-1">Large Language Model (LLM) inference is increasingly deployed as a networked service, yet existing deployments rely primarily on centralized infrastructure and trusted operators. Such designs limit openness, concentrate resource ownership, and constrain scalability to the capacity of individual providers. At the same time, LLM inference introduces execution characteristics (e.g., strict sequential dependencies, large intermediate activations, and tight latency requirements) that are not well supported by existing network, transport, or coordination mechanisms in open environments.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+<p id="section-abstract-2">This document specifies an open, decentralized, and scalable framework for executing LLM inference across independently operated and mutually untrusted participants. The framework treats inference as a distributed, layer-wise execution process subject to explicit deadlines, rather than as a monolithic computation or best-effort service. It combines layer-aware activation transport and routing, decentralized coordination among heterogeneous compute resources, and security mechanisms that provide accountability and correctness without assuming trusted execution.<a href="#section-abstract-2" class="pilcrow">¶</a></p>
+<p id="section-abstract-3">This document focuses on the architectural framework, design rationale, problem definition, challenges, and solution space of the Open, Decentralized, and Scalable Inference framework (ODSI). It does not specify concrete wire protocols, message formats, or protocol state machines. Such protocol-level specifications are to be defined in separate documents that build upon the framework described herein.<a href="#section-abstract-3" class="pilcrow">¶</a></p>
+</section>
+<section class="note rfcEditorRemove" id="section-note.1">
+      <h2 id="name-about-this-document">
+<a href="#name-about-this-document" class="section-name selfRef">About This Document</a>
+      </h2>
+<p id="section-note.1-1">This note is to be removed before publishing as an RFC.<a href="#section-note.1-1" class="pilcrow">¶</a></p>
+<p id="section-note.1-2">
+        The latest revision of this draft can be found at <span><a href="https://kongyanye.github.io/draft-wang-cats-odsi/draft-wang-cats-odsi.html">https://kongyanye.github.io/draft-wang-cats-odsi/draft-wang-cats-odsi.html</a></span>.
+        Status information for this document may be found at <span><a href="https://datatracker.ietf.org/doc/draft-wang-cats-odsi/">https://datatracker.ietf.org/doc/draft-wang-cats-odsi/</a></span>.<a href="#section-note.1-2" class="pilcrow">¶</a></p>
+<p id="section-note.1-3">
+        Discussion of this document takes place on the
+        Computing-Aware Traffic Steering Working Group mailing list (<span><a href="mailto:cats@ietf.org">mailto:cats@ietf.org</a></span>),
+        which is archived at <span><a href="https://mailarchive.ietf.org/arch/browse/cats/">https://mailarchive.ietf.org/arch/browse/cats/</a></span>.
+        Subscribe at <span><a href="https://www.ietf.org/mailman/listinfo/cats/">https://www.ietf.org/mailman/listinfo/cats/</a></span>.<a href="#section-note.1-3" class="pilcrow">¶</a></p>
+<p id="section-note.1-4">Source for this draft and an issue tracker can be found at
+        <span><a href="https://github.com/kongyanye/draft-wang-cats-odsi">https://github.com/kongyanye/draft-wang-cats-odsi</a></span>.<a href="#section-note.1-4" class="pilcrow">¶</a></p>
+</section>
+<div id="status-of-memo">
+<section id="section-boilerplate.1">
+        <h2 id="name-status-of-this-memo">
+<a href="#name-status-of-this-memo" class="section-name selfRef">Status of This Memo</a>
+        </h2>
+<p id="section-boilerplate.1-1">
+        This Internet-Draft is submitted in full conformance with the
+        provisions of BCP 78 and BCP 79.<a href="#section-boilerplate.1-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-2">
+        Internet-Drafts are working documents of the Internet Engineering Task
+        Force (IETF). Note that other groups may also distribute working
+        documents as Internet-Drafts. The list of current Internet-Drafts is
+        at <span><a href="https://datatracker.ietf.org/drafts/current/">https://datatracker.ietf.org/drafts/current/</a></span>.<a href="#section-boilerplate.1-2" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-3">
+        Internet-Drafts are draft documents valid for a maximum of six months
+        and may be updated, replaced, or obsoleted by other documents at any
+        time. It is inappropriate to use Internet-Drafts as reference
+        material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-4">
+        This Internet-Draft will expire on 3 September 2026.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="copyright">
+<section id="section-boilerplate.2">
+        <h2 id="name-copyright-notice">
+<a href="#name-copyright-notice" class="section-name selfRef">Copyright Notice</a>
+        </h2>
+<p id="section-boilerplate.2-1">
+            Copyright (c) 2026 IETF Trust and the persons identified as the
+            document authors. All rights reserved.<a href="#section-boilerplate.2-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.2-2">
+            This document is subject to BCP 78 and the IETF Trust's Legal
+            Provisions Relating to IETF Documents
+            (<span><a href="https://trustee.ietf.org/license-info">https://trustee.ietf.org/license-info</a></span>) in effect on the date of
+            publication of this document. Please review these documents
+            carefully, as they describe your rights and restrictions with
+            respect to this document. Code Components extracted from this
+            document must include Revised BSD License text as described in
+            Section 4.e of the Trust Legal Provisions and are provided without
+            warranty as described in the Revised BSD License.<a href="#section-boilerplate.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="toc">
+<section id="section-toc.1">
+        <a href="#" onclick="scroll(0,0)" class="toplink">▲</a><h2 id="name-table-of-contents">
+<a href="#name-table-of-contents" class="section-name selfRef">Table of Contents</a>
+        </h2>
+<nav class="toc"><ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1">
+            <p id="section-toc.1-1.1.1"><a href="#section-1" class="auto internal xref">1</a>.  <a href="#name-introduction" class="internal xref">Introduction</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.1">
+                <p id="section-toc.1-1.1.2.1.1" class="keepWithNext"><a href="#section-1.1" class="auto internal xref">1.1</a>.  <a href="#name-motivation-for-open-and-dec" class="internal xref">Motivation for Open and Decentralized Inference</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.2">
+                <p id="section-toc.1-1.1.2.2.1" class="keepWithNext"><a href="#section-1.2" class="auto internal xref">1.2</a>.  <a href="#name-scope-and-non-goals" class="internal xref">Scope and Non-Goals</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.3">
+                <p id="section-toc.1-1.1.2.3.1" class="keepWithNext"><a href="#section-1.3" class="auto internal xref">1.3</a>.  <a href="#name-design-principles" class="internal xref">Design Principles</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2">
+            <p id="section-toc.1-1.2.1"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-terminology" class="internal xref">Terminology</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
+            <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-problem-definition" class="internal xref">Problem Definition</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1">
+                <p id="section-toc.1-1.3.2.1.1"><a href="#section-3.1" class="auto internal xref">3.1</a>.  <a href="#name-layer-dependent-execution-p" class="internal xref">Layer-Dependent Execution Pattern</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2">
+                <p id="section-toc.1-1.3.2.2.1"><a href="#section-3.2" class="auto internal xref">3.2</a>.  <a href="#name-stateful-token-by-token-pro" class="internal xref">Stateful Token-by-Token Progression</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.3">
+                <p id="section-toc.1-1.3.2.3.1"><a href="#section-3.3" class="auto internal xref">3.3</a>.  <a href="#name-activation-delivery-with-ti" class="internal xref">Activation Delivery with Timing Constraints</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.4">
+                <p id="section-toc.1-1.3.2.4.1"><a href="#section-3.4" class="auto internal xref">3.4</a>.  <a href="#name-open-participation-and-adve" class="internal xref">Open Participation and Adversarial Behavior</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.5">
+                <p id="section-toc.1-1.3.2.5.1"><a href="#section-3.5" class="auto internal xref">3.5</a>.  <a href="#name-limitations-of-existing-exe" class="internal xref">Limitations of Existing Execution and Transport Methods</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-system-and-threat-assumptio" class="internal xref">System and Threat Assumptions</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-participants-and-roles" class="internal xref">Participants and Roles</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-network-and-execution-assum" class="internal xref">Network and Execution Assumptions</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.3">
+                <p id="section-toc.1-1.4.2.3.1"><a href="#section-4.3" class="auto internal xref">4.3</a>.  <a href="#name-adversary-and-failure-model" class="internal xref">Adversary and Failure Model</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-odsi-framework-overview" class="internal xref">ODSI Framework Overview</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.1">
+                <p id="section-toc.1-1.5.2.1.1"><a href="#section-5.1" class="auto internal xref">5.1</a>.  <a href="#name-high-level-architecture" class="internal xref">High-Level Architecture</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2">
+                <p id="section-toc.1-1.5.2.2.1"><a href="#section-5.2" class="auto internal xref">5.2</a>.  <a href="#name-layer-wise-distributed-exec" class="internal xref">Layer-Wise Distributed Execution Model</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.3">
+                <p id="section-toc.1-1.5.2.3.1"><a href="#section-5.3" class="auto internal xref">5.3</a>.  <a href="#name-open-participation-and-reso" class="internal xref">Open Participation and Resource Contribution</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.4">
+                <p id="section-toc.1-1.5.2.4.1"><a href="#section-5.4" class="auto internal xref">5.4</a>.  <a href="#name-scalability-considerations" class="internal xref">Scalability Considerations</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-execution-and-coordination-" class="internal xref">Execution and Coordination Mechanism</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.1">
+                <p id="section-toc.1-1.6.2.1.1"><a href="#section-6.1" class="auto internal xref">6.1</a>.  <a href="#name-layer-assignment-and-path-a" class="internal xref">Layer Assignment and Path Affinity</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.2">
+                <p id="section-toc.1-1.6.2.2.1"><a href="#section-6.2" class="auto internal xref">6.2</a>.  <a href="#name-handling-stateful-inference" class="internal xref">Handling Stateful Inference and KV Cache</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.3">
+                <p id="section-toc.1-1.6.2.3.1"><a href="#section-6.3" class="auto internal xref">6.3</a>.  <a href="#name-heterogeneous-compute-coord" class="internal xref">Heterogeneous Compute Coordination</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.4">
+                <p id="section-toc.1-1.6.2.4.1"><a href="#section-6.4" class="auto internal xref">6.4</a>.  <a href="#name-failure-handling-and-recove" class="internal xref">Failure Handling and Recovery</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-deadline-driven-execution-a" class="internal xref">Deadline-Driven Execution and Performance Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.1">
+                <p id="section-toc.1-1.7.2.1.1"><a href="#section-7.1" class="auto internal xref">7.1</a>.  <a href="#name-deadline-semantics-and-slac" class="internal xref">Deadline Semantics and Slack</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.2">
+                <p id="section-toc.1-1.7.2.2.1"><a href="#section-7.2" class="auto internal xref">7.2</a>.  <a href="#name-latency-sources-and-bottlen" class="internal xref">Latency Sources and Bottlenecks</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.3">
+                <p id="section-toc.1-1.7.2.3.1"><a href="#section-7.3" class="auto internal xref">7.3</a>.  <a href="#name-routing-and-scheduling-cons" class="internal xref">Routing and Scheduling Considerations</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.4">
+                <p id="section-toc.1-1.7.2.4.1"><a href="#section-7.4" class="auto internal xref">7.4</a>.  <a href="#name-trade-offs-between-flexibil" class="internal xref">Trade-offs Between Flexibility and Timeliness</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-security-and-accountability" class="internal xref">Security and Accountability Framework</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.1">
+                <p id="section-toc.1-1.8.2.1.1"><a href="#section-8.1" class="auto internal xref">8.1</a>.  <a href="#name-cryptographic-identity" class="internal xref">Cryptographic Identity</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2">
+                <p id="section-toc.1-1.8.2.2.1"><a href="#section-8.2" class="auto internal xref">8.2</a>.  <a href="#name-verifiable-execution-action" class="internal xref">Verifiable Execution Actions</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.3">
+                <p id="section-toc.1-1.8.2.3.1"><a href="#section-8.3" class="auto internal xref">8.3</a>.  <a href="#name-stake-based-participation-a" class="internal xref">Stake-Based Participation and Accountability</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.4">
+                <p id="section-toc.1-1.8.2.4.1"><a href="#section-8.4" class="auto internal xref">8.4</a>.  <a href="#name-accountability-without-trus" class="internal xref">Accountability Without Trusted Parties</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-incentives-and-economic-con" class="internal xref">Incentives and Economic Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.1">
+                <p id="section-toc.1-1.9.2.1.1"><a href="#section-9.1" class="auto internal xref">9.1</a>.  <a href="#name-motivation-for-incentive-me" class="internal xref">Motivation for Incentive Mechanisms</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.2">
+                <p id="section-toc.1-1.9.2.2.1"><a href="#section-9.2" class="auto internal xref">9.2</a>.  <a href="#name-costly-misbehavior-and-dete" class="internal xref">Costly Misbehavior and Deterrence</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.3">
+                <p id="section-toc.1-1.9.2.3.1"><a href="#section-9.3" class="auto internal xref">9.3</a>.  <a href="#name-reputation-and-long-term-pa" class="internal xref">Reputation and Long-Term Participation</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
+            <p id="section-toc.1-1.10.1"><a href="#section-10" class="auto internal xref">10</a>. <a href="#name-inference-path-and-control-" class="internal xref">Inference Path and Control Path Separation</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.1">
+                <p id="section-toc.1-1.10.2.1.1"><a href="#section-10.1" class="auto internal xref">10.1</a>.  <a href="#name-design-rationale" class="internal xref">Design Rationale</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.2">
+                <p id="section-toc.1-1.10.2.2.1"><a href="#section-10.2" class="auto internal xref">10.2</a>.  <a href="#name-inference-path-execution-pr" class="internal xref">Inference Path Execution Properties</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.3">
+                <p id="section-toc.1-1.10.2.3.1"><a href="#section-10.3" class="auto internal xref">10.3</a>.  <a href="#name-control-path-functions-and-" class="internal xref">Control Path Functions and Enforcement</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.4">
+                <p id="section-toc.1-1.10.2.4.1"><a href="#section-10.4" class="auto internal xref">10.4</a>.  <a href="#name-bounded-risk-and-practical-" class="internal xref">Bounded Risk and Practical Correctness</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#section-11" class="auto internal xref">11</a>. <a href="#name-scalability-and-deployment-" class="internal xref">Scalability and Deployment Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.1">
+                <p id="section-toc.1-1.11.2.1.1"><a href="#section-11.1" class="auto internal xref">11.1</a>.  <a href="#name-open-membership-and-sybil-r" class="internal xref">Open Membership and Sybil Resistance</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.2">
+                <p id="section-toc.1-1.11.2.2.1"><a href="#section-11.2" class="auto internal xref">11.2</a>.  <a href="#name-growth-and-churn" class="internal xref">Growth and Churn</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.3">
+                <p id="section-toc.1-1.11.2.3.1"><a href="#section-11.3" class="auto internal xref">11.3</a>.  <a href="#name-interoperability-and-extens" class="internal xref">Interoperability and Extensibility</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12">
+            <p id="section-toc.1-1.12.1"><a href="#section-12" class="auto internal xref">12</a>. <a href="#name-privacy-considerations" class="internal xref">Privacy Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13">
+            <p id="section-toc.1-1.13.1"><a href="#section-13" class="auto internal xref">13</a>. <a href="#name-relationship-to-existing-wo" class="internal xref">Relationship to Existing Work</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14">
+            <p id="section-toc.1-1.14.1"><a href="#section-14" class="auto internal xref">14</a>. <a href="#name-acknowledgments" class="internal xref">Acknowledgments</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15">
+            <p id="section-toc.1-1.15.1"><a href="#section-15" class="auto internal xref">15</a>. <a href="#name-references" class="internal xref">References</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.1">
+                <p id="section-toc.1-1.15.2.1.1"><a href="#section-15.1" class="auto internal xref">15.1</a>.  <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15.2.2">
+                <p id="section-toc.1-1.15.2.2.1"><a href="#section-15.2" class="auto internal xref">15.2</a>.  <a href="#name-informative-references" class="internal xref">Informative References</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.16">
+            <p id="section-toc.1-1.16.1"><a href="#appendix-A" class="auto internal xref"></a><a href="#name-authors-addresses" class="internal xref">Authors' Addresses</a></p>
+</li>
+        </ul>
+</nav>
+</section>
+</div>
+<div id="introduction">
+<section id="section-1">
+      <h2 id="name-introduction">
+<a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
+      </h2>
+<p id="section-1-1">Large Language Models (LLMs) have become a foundational component of modern networked applications, supporting tasks such as natural language understanding, code generation, and interactive assistants. Inference for these models is typically delivered as an online service, where user requests are transmitted to remote servers and processed incrementally to generate output tokens. Unlike traditional network services or offline model training workloads, LLM inference exhibits strict sequential dependencies, maintains per-request execution state, and imposes tight latency constraints on model response.<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">Today, most large-scale LLM inference deployments rely on centralized infrastructure operated by a small number of providers. Centralization simplifies coordination, scheduling, and state management, but it also concentrates control, limits participation, and couples scalability to the capacity, geography, and policies of individual operators. As model sizes and inference demand continue to grow, these structural limitations motivate the exploration of alternative execution paradigms that can support broader participation and more elastic scaling.<a href="#section-1-2" class="pilcrow">¶</a></p>
+<p id="section-1-3">This document introduces the Open, Decentralized, and Scalable Inference framework (ODSI), an architectural framework for executing LLM inference across independently operated and heterogeneous compute resources. ODSI considers environments in which participants are mutually untrusted and connected only through the public Internet. The framework focuses on how inference execution can be coordinated, secured, and scaled under such conditions, without assuming centralized control or trusted execution environments.<a href="#section-1-3" class="pilcrow">¶</a></p>
+<div id="motivation-for-open-and-decentralized-inference">
+<section id="section-1.1">
+        <h3 id="name-motivation-for-open-and-dec">
+<a href="#section-1.1" class="section-number selfRef">1.1. </a><a href="#name-motivation-for-open-and-dec" class="section-name selfRef">Motivation for Open and Decentralized Inference</a>
+        </h3>
+<p id="section-1.1-1">Centralized inference architectures assume that compute resources, network paths, and execution environments are under common administrative control. While these assumptions enable tight optimization and simplified coordination, they impose structural constraints that become increasingly pronounced as model sizes continue to grow. Modern LLMs require substantial compute throughput and memory capacity, and deploying a single model instance often exceeds the capabilities of an individual server. As a result, inference deployments increasingly rely on multiple servers to host and execute a single model, raising operational complexity and cost.<a href="#section-1.1-1" class="pilcrow">¶</a></p>
+<p id="section-1.1-2">At the same time, a large volume of distributed compute resources remains underutilized. Many devices and servers possess limited memory capacity or modest compute performance, preventing them from hosting complete model instances despite having available compute resources. These constraints lead to fragmented and wasted capacity, particularly at the network edge or within smaller organizations, where individual nodes cannot independently support large models even though aggregate resources may be sufficient.<a href="#section-1.1-2" class="pilcrow">¶</a></p>
+<p id="section-1.1-3">Centralized cloud-based inference also introduces data movement and privacy concerns. User inputs must be transmitted to remote data centers for processing, increasing exposure to data leakage and raising privacy risks in sensitive applications. In addition, aggregating large volumes of inference traffic at centralized endpoints places sustained pressure on network bandwidth, increases transmission and queuing delays, and creates service bottlenecks that limit horizontal scalability. As demand grows, scaling inference capacity requires proportional expansion of centralized infrastructure and network provisioning, which may not be economically or operationally sustainable.<a href="#section-1.1-3" class="pilcrow">¶</a></p>
+<p id="section-1.1-4">An open and decentralized inference model seeks to address these limitations by allowing independently operated participants to contribute partial compute resources without requiring prior trust relationships or centralized admission. By distributing inference execution across many nodes, including resource-constrained and edge devices, this paradigm enables inference capacity to scale elastically with participation. Placing computation closer to data sources can also reduce data movement, mitigate bandwidth bottlenecks, and improve responsiveness in certain deployment scenarios.<a href="#section-1.1-4" class="pilcrow">¶</a></p>
+<p id="section-1.1-5">However, decentralization fundamentally changes the inference execution environment. Participants may vary widely in compute performance, memory capacity, network connectivity, and availability, and some participants may behave maliciously or rationally rather than altruistically. Moreover, LLM inference is inherently stateful, i.e., the generation of each output token depends on all previous tokens, commonly represented through cached intermediate values such as key–value (KV) caches. These characteristics make inference sensitive to delays, failures, and inconsistencies, and prevent it from being treated as a stateless or best-effort distributed task.<a href="#section-1.1-5" class="pilcrow">¶</a></p>
+<p id="section-1.1-6">ODSI is motivated by the need to support open participation and elastic scaling while preserving the correctness, timeliness, and reliability required for practical LLM inference. The framework addresses how inference can be executed across decentralized and heterogeneous resources while remaining usable as an interactive network service.<a href="#section-1.1-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="scope-and-non-goals">
+<section id="section-1.2">
+        <h3 id="name-scope-and-non-goals">
+<a href="#section-1.2" class="section-number selfRef">1.2. </a><a href="#name-scope-and-non-goals" class="section-name selfRef">Scope and Non-Goals</a>
+        </h3>
+<p id="section-1.2-1">This document defines the architectural framework, problem formulation, and design considerations for decentralized LLM inference under open participation. It identifies the key challenges introduced by decentralization, including state management, latency constraints, heterogeneity, and adversarial behavior, and describes the high-level mechanisms used to address these challenges within the ODSI framework.<a href="#section-1.2-1" class="pilcrow">¶</a></p>
+<p id="section-1.2-2">This document does not specify concrete network protocols, wire formats, message encodings, or protocol state machines. It also does not mandate specific model architectures, execution platforms, hardware accelerators, or economic systems. Where cryptographic, incentive, or coordination mechanisms are discussed, they are described at an abstract level to illustrate design intent rather than to prescribe particular implementations.<a href="#section-1.2-2" class="pilcrow">¶</a></p>
+<p id="section-1.2-3">Protocol-level specifications, interoperability requirements, and implementation details are to be defined in other documents that build upon the framework presented here.<a href="#section-1.2-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="design-principles">
+<section id="section-1.3">
+        <h3 id="name-design-principles">
+<a href="#section-1.3" class="section-number selfRef">1.3. </a><a href="#name-design-principles" class="section-name selfRef">Design Principles</a>
+        </h3>
+<p id="section-1.3-1">The ODSI framework is guided by the following design principles:<a href="#section-1.3-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-1.3-2.1">
+            <p id="section-1.3-2.1.1">Open Participation: Any independently operated participant may contribute compute resources without requiring centralized admission or prior trust, subject to mechanisms that provide accountability and abuse resistance.<a href="#section-1.3-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-2.2">
+            <p id="section-1.3-2.2.1">Decentralized Coordination: Inference execution is coordinated without assuming a single trusted controller, relying instead on distributed mechanisms that tolerate heterogeneity, failures, and adversarial behavior.<a href="#section-1.3-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-2.3">
+            <p id="section-1.3-2.3.1">State-Aware Execution: The framework explicitly accounts for the stateful and sequential nature of LLM inference, including the management of intermediate execution state across tokens and layers.<a href="#section-1.3-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-2.4">
+            <p id="section-1.3-2.4.1">Deadline Sensitivity: Inference execution is treated as a latency-sensitive process, where intermediate steps are subject to explicit timing constraints rather than best-effort delivery.<a href="#section-1.3-2.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-2.5">
+            <p id="section-1.3-2.5.1">Scalability Through Composition: The framework is designed to scale by composing many independent contributors, allowing overall inference capacity to grow with participation rather than centralized provisioning.<a href="#section-1.3-2.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-1.3-3">These principles inform the architectural choices and mechanisms described in the remainder of this document.<a href="#section-1.3-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="terminology">
+<section id="section-2">
+      <h2 id="name-terminology">
+<a href="#section-2" class="section-number selfRef">2. </a><a href="#name-terminology" class="section-name selfRef">Terminology</a>
+      </h2>
+<p id="section-2-1">This section defines the terminology used throughout this document. Phrases in upper-case refer to other defined terms.<a href="#section-2-1" class="pilcrow">¶</a></p>
+<p id="section-2-2">ACTIVATION<a href="#section-2-2" class="pilcrow">¶</a></p>
+<p id="section-2-3">Intermediate numerical data produced by executing a model layer during inference. ACTIVATIONS are consumed by subsequent layers and may be transmitted across the network between participants.<a href="#section-2-3" class="pilcrow">¶</a></p>
+<p id="section-2-4">CONTROL PLANE<a href="#section-2-4" class="pilcrow">¶</a></p>
+<p id="section-2-5">The non-latency-critical path responsible for coordination, verification, and enforcement functions, including cryptographic IDENTITY registration, STAKE management, SLASHING, REWARD settlement, and REPUTATION updates.<a href="#section-2-5" class="pilcrow">¶</a></p>
+<p id="section-2-6">DEADLINE<a href="#section-2-6" class="pilcrow">¶</a></p>
+<p id="section-2-7">A time constraint by which a specific inference step, such as a layer execution or ACTIVATION delivery, must complete to preserve end-to-end responsiveness.<a href="#section-2-7" class="pilcrow">¶</a></p>
+<p id="section-2-8">EXECUTION COMMITMENT<a href="#section-2-8" class="pilcrow">¶</a></p>
+<p id="section-2-9">A cryptographically signed declaration by a PARTICIPANT indicating intent to execute a specific inference step under defined inputs and DEADLINES, enabling later verification.<a href="#section-2-9" class="pilcrow">¶</a></p>
+<p id="section-2-10">IDENTITY<a href="#section-2-10" class="pilcrow">¶</a></p>
+<p id="section-2-11">A persistent, self-generated identifier bound to a PARTICIPANT, typically realized as a public–private key pair.<a href="#section-2-11" class="pilcrow">¶</a></p>
+<p id="section-2-12">INFERENCE PLANE<a href="#section-2-12" class="pilcrow">¶</a></p>
+<p id="section-2-13">The latency-critical path responsible for performing inference-related work, including LAYER execution, ACTIVATION transport, ROUTING, RE-ROUTING, and failure signaling.<a href="#section-2-13" class="pilcrow">¶</a></p>
+<p id="section-2-14">LAYER<a href="#section-2-14" class="pilcrow">¶</a></p>
+<p id="section-2-15">A discrete computation stage within an inference pipeline. LAYERS are executed sequentially for each token step and may be assigned to different execution participants.<a href="#section-2-15" class="pilcrow">¶</a></p>
+<p id="section-2-16">PARTICIPANT<a href="#section-2-16" class="pilcrow">¶</a></p>
+<p id="section-2-17">An independently operated entity that contributes compute, memory, or network resources to ODSI and participates using a cryptographic IDENTITY.<a href="#section-2-17" class="pilcrow">¶</a></p>
+<p id="section-2-18">REPUTATION<a href="#section-2-18" class="pilcrow">¶</a></p>
+<p id="section-2-19">A persistent performance signal associated with a PARTICIPANT, derived from historical correctness, DEADLINE adherence, availability, and throughput. REPUTATION influences task assignment and reward rates.<a href="#section-2-19" class="pilcrow">¶</a></p>
+<p id="section-2-20">RE-ROUTING<a href="#section-2-20" class="pilcrow">¶</a></p>
+<p id="section-2-21">The process of dynamically changing the ROUTING or LAYER assignment of an ongoing inference request in response to failures, performance degradation, or DEADLINE pressure.<a href="#section-2-21" class="pilcrow">¶</a></p>
+<p id="section-2-22">REWARD<a href="#section-2-22" class="pilcrow">¶</a></p>
+<p id="section-2-23">An economic payment issued to a PARTICIPANT for successfully completing an assigned inference task.<a href="#section-2-23" class="pilcrow">¶</a></p>
+<p id="section-2-24">ROUTING<a href="#section-2-24" class="pilcrow">¶</a></p>
+<p id="section-2-25">The selection of execution participants and network paths for ACTIVATION transport and LAYER execution, informed by DEADLINES and observed performance.<a href="#section-2-25" class="pilcrow">¶</a></p>
+<p id="section-2-26">SLACK<a href="#section-2-26" class="pilcrow">¶</a></p>
+<p id="section-2-27">The difference between an allocated DEADLINE budget and the expected execution time for an inference step. SLACK represents tolerance to variability and delay.<a href="#section-2-27" class="pilcrow">¶</a></p>
+<p id="section-2-28">SLASHING<a href="#section-2-28" class="pilcrow">¶</a></p>
+<p id="section-2-29">An enforced economic penalty applied to a PARTICIPANT when verifiable misbehavior is detected, such as incorrect output, missed DEADLINES, or commitment violations.<a href="#section-2-29" class="pilcrow">¶</a></p>
+<p id="section-2-30">STAKE<a href="#section-2-30" class="pilcrow">¶</a></p>
+<p id="section-2-31">A quantity of economic value locked by a PARTICIPANT as collateral for participation. STAKE enables accountability, economic deterrence, and Sybil resistance<a href="#section-2-31" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="problem-definition">
+<section id="section-3">
+      <h2 id="name-problem-definition">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-problem-definition" class="section-name selfRef">Problem Definition</a>
+      </h2>
+<p id="section-3-1">This section defines the core problem addressed by the ODSI framework. The goal is to formalize the execution constraints and failure modes that arise when LLM inference is performed across open, distributed, and independently operated compute resources. These constraints collectively define what it means for decentralized inference to be correct, timely, and usable.<a href="#section-3-1" class="pilcrow">¶</a></p>
+<div id="layer-dependent-execution-pattern">
+<section id="section-3.1">
+        <h3 id="name-layer-dependent-execution-p">
+<a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-layer-dependent-execution-p" class="section-name selfRef">Layer-Dependent Execution Pattern</a>
+        </h3>
+<p id="section-3.1-1">LLM inference executes as a fixed sequence of model layers applied repeatedly for each generated token. The output of each layer constitutes an intermediate activation that is required as input to the next layer in the sequence. Execution therefore forms a strict dependency chain at layer granularity.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
+<p id="section-3.1-2">In a decentralized setting, different layers may be executed on different nodes. This introduces an explicit requirement that intermediate activations be transferred between nodes in the correct order and without duplication or omission. Any execution framework must preserve layer ordering and ensure that each layer operates on the correct input corresponding to a specific inference request and token position.<a href="#section-3.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="stateful-token-by-token-progression">
+<section id="section-3.2">
+        <h3 id="name-stateful-token-by-token-pro">
+<a href="#section-3.2" class="section-number selfRef">3.2. </a><a href="#name-stateful-token-by-token-pro" class="section-name selfRef">Stateful Token-by-Token Progression</a>
+        </h3>
+<p id="section-3.2-1">Inference proceeds incrementally, generating tokens one at a time. Each token depends on an execution state accumulated from all previous tokens, commonly including cached intermediate values such as KV caches. This state is logically persistent over the lifetime of the inference request.<a href="#section-3.2-1" class="pilcrow">¶</a></p>
+<p id="section-3.2-2">As a result, inference requests exhibit execution affinity, i.e., successive tokens must either be processed by nodes that already possess the relevant state or incur the cost of state transfer or reconstruction. Failures, delays, or inconsistencies in state handling directly affect correctness and latency. The problem therefore includes maintaining coherent per-request state across a sequence of distributed execution steps.<a href="#section-3.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="activation-delivery-with-timing-constraints">
+<section id="section-3.3">
+        <h3 id="name-activation-delivery-with-ti">
+<a href="#section-3.3" class="section-number selfRef">3.3. </a><a href="#name-activation-delivery-with-ti" class="section-name selfRef">Activation Delivery with Timing Constraints</a>
+        </h3>
+<p id="section-3.3-1">For interactive applications, inference must progress under tight latency constraints. Each layer execution contributes both computation delay and communication delay, and delays in earlier layers propagate to all subsequent layers within the same token generation step.<a href="#section-3.3-1" class="pilcrow">¶</a></p>
+<p id="section-3.3-2">This creates implicit per-layer timing constraints, i.e., intermediate activations must be delivered within bounded time to sustain acceptable end-to-end response latency. The problem is not merely reliable delivery, but timely delivery under variable network conditions and heterogeneous execution speeds.<a href="#section-3.3-2" class="pilcrow">¶</a></p>
+<p id="section-3.3-3">The activation delivery problem is defined as follows. Given a sequence of layer-dependent computations distributed across multiple nodes, how can intermediate activations be delivered and processed in order, within time bounds, despite variability in network latency, compute throughput, and node availability?<a href="#section-3.3-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="open-participation-and-adversarial-behavior">
+<section id="section-3.4">
+        <h3 id="name-open-participation-and-adve">
+<a href="#section-3.4" class="section-number selfRef">3.4. </a><a href="#name-open-participation-and-adve" class="section-name selfRef">Open Participation and Adversarial Behavior</a>
+        </h3>
+<p id="section-3.4-1">ODSI assumes an open execution environment in which nodes may join or leave without centralized admission and are operated by independent parties. Participants may differ significantly in performance, reliability, and incentives, and some may behave maliciously or rationally rather than cooperatively.<a href="#section-3.4-1" class="pilcrow">¶</a></p>
+<p id="section-3.4-2">The problems to solve therefore includes:<a href="#section-3.4-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-3.4-3.1">
+            <p id="section-3.4-3.1.1">Detecting incorrect or inconsistent execution results,<a href="#section-3.4-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-3.4-3.2">
+            <p id="section-3.4-3.2.1">Attributing actions to specific participants,<a href="#section-3.4-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-3.4-3.3">
+            <p id="section-3.4-3.3.1">Preventing abuse such as equivocation, free-riding, or denial of service,<a href="#section-3.4-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-3.4-3.4">
+            <p id="section-3.4-3.4.1">Enabling accountability without assuming trusted execution environments.<a href="#section-3.4-3.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-3.4-4">Any viable solution must address correctness and liveness under these conditions while remaining compatible with open participation.<a href="#section-3.4-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="limitations-of-existing-execution-and-transport-methods">
+<section id="section-3.5">
+        <h3 id="name-limitations-of-existing-exe">
+<a href="#section-3.5" class="section-number selfRef">3.5. </a><a href="#name-limitations-of-existing-exe" class="section-name selfRef">Limitations of Existing Execution and Transport Methods</a>
+        </h3>
+<p id="section-3.5-1">Existing execution and transport methods do not directly address the problem defined above. Best-effort networking does not account for execution dependencies or timing constraints. Traditional distributed computation frameworks assume stable membership, trusted operators, or coarse-grained tasks. Centralized schedulers do not extend naturally to environments without common administrative control.<a href="#section-3.5-1" class="pilcrow">¶</a></p>
+<p id="section-3.5-2">The problem addressed by ODSI is therefore not solved by simply distributing computation or improving transport performance. It requires a framework that explicitly integrates execution dependencies, state management, timing constraints, and participant accountability into the design.<a href="#section-3.5-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="system-and-threat-assumptions">
+<section id="section-4">
+      <h2 id="name-system-and-threat-assumptio">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-system-and-threat-assumptio" class="section-name selfRef">System and Threat Assumptions</a>
+      </h2>
+<p id="section-4-1">This section specifies the assumptions under which the ODSI framework operates. It defines the participating entities, communication and execution conditions, and the classes of failures and adversarial behavior the framework is designed to tolerate. No centralized trust, privileged operators, or trusted execution environments are assumed.<a href="#section-4-1" class="pilcrow">¶</a></p>
+<div id="participants-and-roles">
+<section id="section-4.1">
+        <h3 id="name-participants-and-roles">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-participants-and-roles" class="section-name selfRef">Participants and Roles</a>
+        </h3>
+<p id="section-4.1-1">The system consists of a set of independently operated nodes that participate in inference execution. Nodes may assume one or more of the following roles:<a href="#section-4.1-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-4.1-2.1">
+            <p id="section-4.1-2.1.1"><strong>Clients</strong> initiate inference requests and receive generated outputs. A client may or may not also participate in execution.<a href="#section-4.1-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.1-2.2">
+            <p id="section-4.1-2.2.1"><strong>Execution Nodes</strong> perform inference computation, typically executing one or more model layers for specific inference requests. Execution nodes may differ in compute capacity, memory availability, and supported hardware.<a href="#section-4.1-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.1-2.3">
+            <p id="section-4.1-2.3.1"><strong>Coordination Nodes</strong> participate in control-plane functions such as identity management, stake accounting, verification, and settlement. These roles may be co-located with execution nodes or operated separately.<a href="#section-4.1-2.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-4.1-3">All participants are identified by persistent cryptographic identities. No global trust relationships are assumed among participants, and no role is restricted to a fixed or privileged set of operators.<a href="#section-4.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="network-and-execution-assumptions">
+<section id="section-4.2">
+        <h3 id="name-network-and-execution-assum">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-network-and-execution-assum" class="section-name selfRef">Network and Execution Assumptions</a>
+        </h3>
+<p id="section-4.2-1">Nodes communicate over the public Internet using unreliable, asynchronous networks. Message delivery may experience variable latency, reordering, duplication, or loss. No assumptions are made about bounded network delay or synchronized clocks, except where explicitly stated by higher-layer mechanisms.<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<p id="section-4.2-2">Execution nodes are heterogeneous. They may differ in:<a href="#section-4.2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-4.2-3.1">
+            <p id="section-4.2-3.1.1">Compute throughput and supported instruction sets,<a href="#section-4.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.2-3.2">
+            <p id="section-4.2-3.2.1">Available memory and storage,<a href="#section-4.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.2-3.3">
+            <p id="section-4.2-3.3.1">Network bandwidth and latency,<a href="#section-4.2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.2-3.4">
+            <p id="section-4.2-3.4.1">Availability and uptime.<a href="#section-4.2-3.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-4.2-4">Nodes may join or leave the system at arbitrary times. Execution may be interrupted due to failures, preemption, or voluntary withdrawal. The system does not assume trusted execution environments or hardware-based attestation, and correctness cannot be inferred solely from successful message delivery.<a href="#section-4.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="adversary-and-failure-model">
+<section id="section-4.3">
+        <h3 id="name-adversary-and-failure-model">
+<a href="#section-4.3" class="section-number selfRef">4.3. </a><a href="#name-adversary-and-failure-model" class="section-name selfRef">Adversary and Failure Model</a>
+        </h3>
+<p id="section-4.3-1">The framework assumes the presence of faulty, rational, and malicious participants. Nodes may deviate arbitrarily from prescribed behavior, including but not limited to:<a href="#section-4.3-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-4.3-2.1">
+            <p id="section-4.3-2.1.1">Returning incorrect or fabricated inference outputs,<a href="#section-4.3-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.3-2.2">
+            <p id="section-4.3-2.2.1">Withholding results or responding after deadlines,<a href="#section-4.3-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.3-2.3">
+            <p id="section-4.3-2.3.1">Equivocating by providing inconsistent results to different peers,<a href="#section-4.3-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.3-2.4">
+            <p id="section-4.3-2.4.1">Attempting to free-ride without performing assigned computation,<a href="#section-4.3-2.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.3-2.5">
+            <p id="section-4.3-2.5.1">Launching denial-of-service or resource exhaustion attacks.<a href="#section-4.3-2.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-4.3-3">In addition to malicious behavior, the system must tolerate non-malicious failures such as crashes, network partitions, and transient performance degradation.<a href="#section-4.3-3" class="pilcrow">¶</a></p>
+<p id="section-4.3-4">The adversary is not assumed to control a majority of system resources globally, but may control multiple identities unless mitigated by Sybil-resistance mechanisms. The framework does not assume confidentiality of intermediate activations unless explicitly provided by higher-layer mechanisms.<a href="#section-4.3-4" class="pilcrow">¶</a></p>
+<p id="section-4.3-5">Under these assumptions, the framework aims to provide:<a href="#section-4.3-5" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-4.3-6.1">
+            <p id="section-4.3-6.1.1">Safety: incorrect inference results can be detected and attributed,<a href="#section-4.3-6.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.3-6.2">
+            <p id="section-4.3-6.2.1">Liveness: inference can make progress despite failures and churn,<a href="#section-4.3-6.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-4.3-6.3">
+            <p id="section-4.3-6.3.1">Accountability: misbehavior can be penalized without relying on trusted authorities.<a href="#section-4.3-6.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+</section>
+</div>
+</section>
+</div>
+<div id="odsi-framework-overview">
+<section id="section-5">
+      <h2 id="name-odsi-framework-overview">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-odsi-framework-overview" class="section-name selfRef">ODSI Framework Overview</a>
+      </h2>
+<p id="section-5-1">This section provides a high-level overview of the ODSI framework. The framework defines how large-scale inference execution can be coordinated across open, heterogeneous, and independently operated resources while preserving correctness, timeliness, and accountability.<a href="#section-5-1" class="pilcrow">¶</a></p>
+<p id="section-5-2">ODSI is structured as a layered framework that integrates execution, coordination, and incentive mechanisms. It does not mandate a specific implementation or protocol stack, but instead defines architectural components and their interactions.<a href="#section-5-2" class="pilcrow">¶</a></p>
+<div id="high-level-architecture">
+<section id="section-5.1">
+        <h3 id="name-high-level-architecture">
+<a href="#section-5.1" class="section-number selfRef">5.1. </a><a href="#name-high-level-architecture" class="section-name selfRef">High-Level Architecture</a>
+        </h3>
+<div class="alignLeft art-text artwork" id="section-5.1-1">
+<pre>
+                 +----------------------+
+                 |        Client        |
+                 |  (Inference Request) |
+                 +----------+-----------+
+                            |
+                            v
+=========================================================
+|                    INFERENCE PLANE                    |
+|   (Deadline-Critical, Peer-to-Peer Inference Path)    |
+|                                                       |
+|   +-----------+     +-----------+     +-----------+   |
+|   |  Layer i  | --&gt; | Layer i+1 | --&gt; | Layer i+2 |   |
+|   | Exec Node |     | Exec Node |     | Exec Node |   |
+|   +-----------+     +-----------+     +-----------+   |
+|       |                   |                   |       |
+|       |        Intermediate Activations       |       |
+|       +---------------------------------------+       |
+|                                                       |
+=========================================================
+                            |
+                            |   Execution Events
+                            |   (commit, result, timing)
+                            v
+---------------------------------------------------------
+|                     CONTROL PLANE                     |
+|     (Asynchronous Coordination and Accountability)    |
+|                                                       |
+|   +----------------+   +--------------------------+   |
+|   | Identity and   |   | Verification and Dispute |   |
+|   | Stake Manage.  |   | Resolution               |   |
+|   +----------------+   +--------------------------+   |
+|            |                     |                    |
+|            v                     v                    |
+|   +----------------+   +--------------------------+   |
+|   | Incentives and |   | Reputation and Routing   |   |
+|   | Settlement     |   | Feedback                 |   |
+|   +----------------+   +--------------------------+   |
+|                                                       |
+---------------------------------------------------------
+</pre><a href="#section-5.1-1" class="pilcrow">¶</a>
+</div>
+<p id="section-5.1-2">At a high level, ODSI separates inference execution into two logically distinct planes:<a href="#section-5.1-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.1-3.1">
+            <p id="section-5.1-3.1.1">Execution Plane: Responsible for performing inference computation and delivering intermediate results under latency constraints.<a href="#section-5.1-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.1-3.2">
+            <p id="section-5.1-3.2.1">Control Plane: Responsible for identity management, coordination, verification, accounting, and enforcement.<a href="#section-5.1-3.2.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-5.1-4">The execution plane operates in a peer-to-peer fashion and is optimized for low-latency, deadline-sensitive computation. The control plane operates asynchronously and does not block inference progress, allowing execution to proceed even in the presence of coordination delays.<a href="#section-5.1-4" class="pilcrow">¶</a></p>
+<p id="section-5.1-5">This separation enables inference to remain responsive while still supporting accountability and correctness in an open environment.<a href="#section-5.1-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="layer-wise-distributed-execution-model">
+<section id="section-5.2">
+        <h3 id="name-layer-wise-distributed-exec">
+<a href="#section-5.2" class="section-number selfRef">5.2. </a><a href="#name-layer-wise-distributed-exec" class="section-name selfRef">Layer-Wise Distributed Execution Model</a>
+        </h3>
+<p id="section-5.2-1">ODSI adopts a layer-wise execution model in which inference computation is decomposed into sequential stages corresponding to the layers of the inference graph. Each stage may be executed by a different execution node, and intermediate results are transferred between nodes as needed.<a href="#section-5.2-1" class="pilcrow">¶</a></p>
+<p id="section-5.2-2">Execution proceeds incrementally for each inference request, with explicit association between:<a href="#section-5.2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.2-3.1">
+            <p id="section-5.2-3.1.1">A specific inference request,<a href="#section-5.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.2-3.2">
+            <p id="section-5.2-3.2.1">A specific token generation step,<a href="#section-5.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.2-3.3">
+            <p id="section-5.2-3.3.1">A specific computation layer.<a href="#section-5.2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-5.2-4">This explicit structuring allows the framework to reason about execution dependencies, timing constraints, and correctness at layer granularity. It also enables flexible placement of computation across nodes with varying capabilities, without requiring any single node to host the entire inference workload.<a href="#section-5.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="open-participation-and-resource-contribution">
+<section id="section-5.3">
+        <h3 id="name-open-participation-and-reso">
+<a href="#section-5.3" class="section-number selfRef">5.3. </a><a href="#name-open-participation-and-reso" class="section-name selfRef">Open Participation and Resource Contribution</a>
+        </h3>
+<p id="section-5.3-1">ODSI is designed to support open participation without centralized admission control. Any node may contribute resources to inference execution by assuming execution or coordination roles, subject to framework-defined requirements for identity, accountability, and correctness.<a href="#section-5.3-1" class="pilcrow">¶</a></p>
+<p id="section-5.3-2">Resource contribution is flexible and may include:<a href="#section-5.3-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.3-3.1">
+            <p id="section-5.3-3.1.1">Compute capacity for executing specific computation stages,<a href="#section-5.3-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.3-3.2">
+            <p id="section-5.3-3.2.1">Memory for maintaining execution state,<a href="#section-5.3-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.3-3.3">
+            <p id="section-5.3-3.3.1">Network capacity for transporting intermediate results.<a href="#section-5.3-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-5.3-4">Nodes are not required to support complete inference execution. Instead, they may contribute partial resources aligned with their capabilities. This allows resource-constrained or edge nodes to participate meaningfully, while enabling aggregate inference capacity to scale with the number of participants.<a href="#section-5.3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="scalability-considerations">
+<section id="section-5.4">
+        <h3 id="name-scalability-considerations">
+<a href="#section-5.4" class="section-number selfRef">5.4. </a><a href="#name-scalability-considerations" class="section-name selfRef">Scalability Considerations</a>
+        </h3>
+<p id="section-5.4-1">Scalability in ODSI is achieved through decentralization, decomposition, and asynchronous coordination. By distributing execution across many independently operated nodes, the framework avoids reliance on centralized bottlenecks.<a href="#section-5.4-1" class="pilcrow">¶</a></p>
+<p id="section-5.4-2">Key scalability properties include:<a href="#section-5.4-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.4-3.1">
+            <p id="section-5.4-3.1.1">Horizontal scaling: Inference capacity increases with the number of participating nodes.<a href="#section-5.4-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.4-3.2">
+            <p id="section-5.4-3.2.1">Elastic participation: Nodes may join or leave without global reconfiguration.<a href="#section-5.4-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.4-3.3">
+            <p id="section-5.4-3.3.1">Local decision-making: Execution placement and routing decisions can be made using local observations rather than global state.<a href="#section-5.4-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-5.4-4">The framework is designed to tolerate heterogeneity and churn while maintaining bounded coordination overhead. As inference demand grows, scalability is achieved by expanding participation rather than by increasing the capacity of centralized infrastructure.<a href="#section-5.4-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="execution-and-coordination-mechanism">
+<section id="section-6">
+      <h2 id="name-execution-and-coordination-">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-execution-and-coordination-" class="section-name selfRef">Execution and Coordination Mechanism</a>
+      </h2>
+<p id="section-6-1">This section describes how inference execution is coordinated across distributed participants in the ODSI framework. It focuses on how computation is assigned, how execution state is preserved, how heterogeneous resources are coordinated, and how failures are handled during inference execution.<a href="#section-6-1" class="pilcrow">¶</a></p>
+<div id="layer-assignment-and-path-affinity">
+<section id="section-6.1">
+        <h3 id="name-layer-assignment-and-path-a">
+<a href="#section-6.1" class="section-number selfRef">6.1. </a><a href="#name-layer-assignment-and-path-a" class="section-name selfRef">Layer Assignment and Path Affinity</a>
+        </h3>
+<p id="section-6.1-1">Inference execution in ODSI is organized as a sequence of layer executions. For each inference request, layers are assigned to execution nodes based on their capabilities, availability, and observed performance characteristics.<a href="#section-6.1-1" class="pilcrow">¶</a></p>
+<p id="section-6.1-2">ODSI introduces the notion of execution path affinity, whereby successive layers and token steps of the same inference request preferentially follow a consistent sequence of nodes. Path affinity reduces the need to transfer execution state and intermediate data, thereby improving latency and reducing network overhead.<a href="#section-6.1-2" class="pilcrow">¶</a></p>
+<p id="section-6.1-3">Layer assignment decisions may be adapted dynamically in response to changing network conditions or node availability. However, reassignment is performed conservatively to avoid excessive state migration or disruption of ongoing inference execution. Under typical operating conditions, stable execution paths are expected to dominate, and recovery-related latency remains within acceptable bounds for interactive inference.<a href="#section-6.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="handling-stateful-inference-and-kv-cache">
+<section id="section-6.2">
+        <h3 id="name-handling-stateful-inference">
+<a href="#section-6.2" class="section-number selfRef">6.2. </a><a href="#name-handling-stateful-inference" class="section-name selfRef">Handling Stateful Inference and KV Cache</a>
+        </h3>
+<p id="section-6.2-1">Inference execution maintains per-request state across token generation steps. This state commonly includes cached intermediate values such as KV caches, which are required for efficient generation of subsequent tokens.<a href="#section-6.2-1" class="pilcrow">¶</a></p>
+<p id="section-6.2-2">ODSI treats execution state as logically associated with an execution path rather than with a single node. State may be:<a href="#section-6.2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-6.2-3.1">
+            <p id="section-6.2-3.1.1">Retained locally by execution nodes across successive steps,<a href="#section-6.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.2-3.2">
+            <p id="section-6.2-3.2.1">Transferred explicitly when execution is reassigned,<a href="#section-6.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.2-3.3">
+            <p id="section-6.2-3.3.1">Reconstructed when transfer is infeasible or too costly.<a href="#section-6.2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-6.2-4">This document does not mandate a specific state representation or transfer mechanism. Instead, it defines coordination requirements that ensure state consistency and correctness across execution steps.<a href="#section-6.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="heterogeneous-compute-coordination">
+<section id="section-6.3">
+        <h3 id="name-heterogeneous-compute-coord">
+<a href="#section-6.3" class="section-number selfRef">6.3. </a><a href="#name-heterogeneous-compute-coord" class="section-name selfRef">Heterogeneous Compute Coordination</a>
+        </h3>
+<p id="section-6.3-1">Execution nodes in ODSI are heterogeneous in compute performance, memory capacity, and network connectivity. Coordination mechanisms must account for this heterogeneity when assigning computation and routing intermediate results.<a href="#section-6.3-1" class="pilcrow">¶</a></p>
+<p id="section-6.3-2">Nodes may advertise capabilities and performance metrics, such as execution throughput or observed latency. Coordination decisions may incorporate these metrics to balance load, avoid bottlenecks, and satisfy timing constraints.<a href="#section-6.3-2" class="pilcrow">¶</a></p>
+<p id="section-6.3-3">The framework supports partial participation, allowing nodes to execute only those computation stages that align with their capabilities. This enables broad participation without requiring uniform hardware or resource provisioning.<a href="#section-6.3-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="failure-handling-and-recovery">
+<section id="section-6.4">
+        <h3 id="name-failure-handling-and-recove">
+<a href="#section-6.4" class="section-number selfRef">6.4. </a><a href="#name-failure-handling-and-recove" class="section-name selfRef">Failure Handling and Recovery</a>
+        </h3>
+<p id="section-6.4-1">ODSI is designed to tolerate failures during inference execution, including node crashes, network disruptions, and missed execution deadlines.<a href="#section-6.4-1" class="pilcrow">¶</a></p>
+<p id="section-6.4-2">Failure handling strategies include:<a href="#section-6.4-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-6.4-3.1">
+            <p id="section-6.4-3.1.1">Detecting stalled or failed execution steps through timeout or absence of expected outputs,<a href="#section-6.4-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.4-3.2">
+            <p id="section-6.4-3.2.1">Reassigning computation to alternative nodes when failures occur,<a href="#section-6.4-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.4-3.3">
+            <p id="section-6.4-3.3.1">Reconstructing execution state when necessary to resume inference.<a href="#section-6.4-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-6.4-4">The framework prioritizes forward progress and bounded recovery cost. Failures may result in degraded performance or recomputation, but should not compromise correctness or global system stability.<a href="#section-6.4-4" class="pilcrow">¶</a></p>
+<p id="section-6.4-5">Recovery mechanisms are coordinated without assuming centralized control and do not require halting unrelated inference requests.<a href="#section-6.4-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="deadline-driven-execution-and-performance-considerations">
+<section id="section-7">
+      <h2 id="name-deadline-driven-execution-a">
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-deadline-driven-execution-a" class="section-name selfRef">Deadline-Driven Execution and Performance Considerations</a>
+      </h2>
+<p id="section-7-1">Interactive inference services impose strict latency requirements that shape execution, coordination, and resource selection decisions. This section describes how ODSI reasons about deadlines, identifies sources of latency, and manages trade-offs between flexibility and timely execution.<a href="#section-7-1" class="pilcrow">¶</a></p>
+<div id="deadline-semantics-and-slack">
+<section id="section-7.1">
+        <h3 id="name-deadline-semantics-and-slac">
+<a href="#section-7.1" class="section-number selfRef">7.1. </a><a href="#name-deadline-semantics-and-slac" class="section-name selfRef">Deadline Semantics and Slack</a>
+        </h3>
+<p id="section-7.1-1">In ODSI, inference execution is associated with explicit or implicit deadlines derived from application-level responsiveness requirements. Deadlines apply not only to end-to-end inference requests but also to intermediate execution steps, such as individual layer computations within a token generation cycle.<a href="#section-7.1-1" class="pilcrow">¶</a></p>
+<p id="section-7.1-2">Each execution step may be assigned a deadline budget, representing the maximum allowable time from input availability to output production. The difference between the allocated budget and the expected execution time is referred to as slack. Slack captures tolerance to variability in computation and communication and serves as a key signal for execution planning.<a href="#section-7.1-2" class="pilcrow">¶</a></p>
+<p id="section-7.1-3">Slack is consumed as inference progresses. Delays incurred at earlier steps reduce the slack available to downstream steps, making subsequent execution increasingly time-sensitive. The framework therefore prioritizes maintaining positive slack throughout execution to preserve responsiveness.<a href="#section-7.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="latency-sources-and-bottlenecks">
+<section id="section-7.2">
+        <h3 id="name-latency-sources-and-bottlen">
+<a href="#section-7.2" class="section-number selfRef">7.2. </a><a href="#name-latency-sources-and-bottlen" class="section-name selfRef">Latency Sources and Bottlenecks</a>
+        </h3>
+<p id="section-7.2-1">End-to-end inference latency arises from multiple sources, including:<a href="#section-7.2-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-7.2-2.1">
+            <p id="section-7.2-2.1.1">Computation time for executing individual layers,<a href="#section-7.2-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.2-2.2">
+            <p id="section-7.2-2.2.1">Data transfer time for delivering intermediate results,<a href="#section-7.2-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.2-2.3">
+            <p id="section-7.2-2.3.1">Queuing delays caused by contention for compute or network resources,<a href="#section-7.2-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.2-2.4">
+            <p id="section-7.2-2.4.1">Coordination overhead for assignment and verification.<a href="#section-7.2-2.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-7.2-3">In decentralized environments, these latency components are highly variable and may fluctuate over short time scales. Bottlenecks may shift dynamically due to changes in network conditions, node availability, or workload distribution.<a href="#section-7.2-3" class="pilcrow">¶</a></p>
+<p id="section-7.2-4">ODSI does not assume that any single latency source dominates. Instead, it treats latency as a composite effect and seeks to minimize the risk of deadline violations by accounting for both computation and communication delays when coordinating execution.<a href="#section-7.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="routing-and-scheduling-considerations">
+<section id="section-7.3">
+        <h3 id="name-routing-and-scheduling-cons">
+<a href="#section-7.3" class="section-number selfRef">7.3. </a><a href="#name-routing-and-scheduling-cons" class="section-name selfRef">Routing and Scheduling Considerations</a>
+        </h3>
+<p id="section-7.3-1">Routing and scheduling decisions in ODSI are informed by deadline constraints and observed performance. Execution steps may be routed through nodes that offer favorable trade-offs between compute throughput, network latency, and reliability.<a href="#section-7.3-1" class="pilcrow">¶</a></p>
+<p id="section-7.3-2">Scheduling decisions may incorporate:<a href="#section-7.3-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-7.3-3.1">
+            <p id="section-7.3-3.1.1">Estimated computation time based on historical performance,<a href="#section-7.3-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.3-3.2">
+            <p id="section-7.3-3.2.1">Network round-trip latency and variability,<a href="#section-7.3-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.3-3.3">
+            <p id="section-7.3-3.3.1">Current queue occupancy or load,<a href="#section-7.3-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-7.3-3.4">
+            <p id="section-7.3-3.4.1">Remaining slack for the inference request.<a href="#section-7.3-3.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-7.3-4">The framework favors execution paths that preserve slack and reduce the probability of deadline violations. However, routing decisions are made using incomplete and potentially stale information, and must therefore tolerate uncertainty.<a href="#section-7.3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="trade-offs-between-flexibility-and-timeliness">
+<section id="section-7.4">
+        <h3 id="name-trade-offs-between-flexibil">
+<a href="#section-7.4" class="section-number selfRef">7.4. </a><a href="#name-trade-offs-between-flexibil" class="section-name selfRef">Trade-offs Between Flexibility and Timeliness</a>
+        </h3>
+<p id="section-7.4-1">ODSI balances execution flexibility against the need for timely completion. Allowing frequent reassignment or dynamic reconfiguration can improve robustness and load balancing but may introduce additional coordination overhead and state transfer costs.<a href="#section-7.4-1" class="pilcrow">¶</a></p>
+<p id="section-7.4-2">Conversely, favoring stable execution paths improves predictability and reduces overhead but may limit the system’s ability to respond to failures or performance degradation.<a href="#section-7.4-2" class="pilcrow">¶</a></p>
+<p id="section-7.4-3">The framework does not prescribe a single optimal balance. Instead, it defines a design space in which implementations may tune the degree of flexibility based on workload characteristics, deployment conditions, and performance objectives. The guiding principle is to favor timely execution in the common case, while retaining sufficient adaptability to preserve progress under adverse conditions.<a href="#section-7.4-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="security-and-accountability-framework">
+<section id="section-8">
+      <h2 id="name-security-and-accountability">
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-security-and-accountability" class="section-name selfRef">Security and Accountability Framework</a>
+      </h2>
+<p id="section-8-1">This section describes the security and accountability mechanisms assumed by the ODSI framework. The framework operates in an open environment with mutually untrusted participants and therefore relies on cryptographic mechanisms and economic accountability rather than trusted operators or centralized enforcement.<a href="#section-8-1" class="pilcrow">¶</a></p>
+<div id="cryptographic-identity">
+<section id="section-8.1">
+        <h3 id="name-cryptographic-identity">
+<a href="#section-8.1" class="section-number selfRef">8.1. </a><a href="#name-cryptographic-identity" class="section-name selfRef">Cryptographic Identity</a>
+        </h3>
+<p id="section-8.1-1">Each participant in the system is associated with a persistent cryptographic identity, typically represented by a public–private key pair <span>[<a href="#RFC6979" class="cite xref">RFC6979</a>]</span>. This identity serves as the basis for authentication, attribution, and accountability across all interactions.<a href="#section-8.1-1" class="pilcrow">¶</a></p>
+<p id="section-8.1-2">All inference-related actions, including execution commitments, result submissions, and coordination messages, are bound to the participant’s identity through digital signatures. This binding ensures that actions can be reliably attributed to specific participants without relying on centralized identity providers.<a href="#section-8.1-2" class="pilcrow">¶</a></p>
+<p id="section-8.1-3">Identities are self-generated and do not imply trust. The framework assumes that a single entity may control multiple identities unless constrained by additional mechanisms such as economic bonding or resource-based admission.<a href="#section-8.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="verifiable-execution-actions">
+<section id="section-8.2">
+        <h3 id="name-verifiable-execution-action">
+<a href="#section-8.2" class="section-number selfRef">8.2. </a><a href="#name-verifiable-execution-action" class="section-name selfRef">Verifiable Execution Actions</a>
+        </h3>
+<p id="section-8.2-1">ODSI requires that execution-related actions be verifiable, meaning that they can be independently checked for consistency, correctness, or policy compliance after the fact.<a href="#section-8.2-1" class="pilcrow">¶</a></p>
+<p id="section-8.2-2">Verifiable actions may include:<a href="#section-8.2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-8.2-3.1">
+            <p id="section-8.2-3.1.1">Commitments to execute specific computation stages,<a href="#section-8.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-8.2-3.2">
+            <p id="section-8.2-3.2.1">Submission of intermediate or final execution outputs,<a href="#section-8.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-8.2-3.3">
+            <p id="section-8.2-3.3.1">Timing assertions related to execution deadlines.<a href="#section-8.2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-8.2-4">Verification does not require continuous oversight during execution. Instead, it relies on cryptographic commitments, hashes, and signed messages that allow third parties to reconstruct and evaluate execution behavior when disputes arise.<a href="#section-8.2-4" class="pilcrow">¶</a></p>
+<p id="section-8.2-5">This approach enables detection of incorrect execution, equivocation, or deadline violations without imposing synchronous verification on the critical execution path <span>[<a href="#Byzantine" class="cite xref">Byzantine</a>]</span>.<a href="#section-8.2-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="stake-based-participation-and-accountability">
+<section id="section-8.3">
+        <h3 id="name-stake-based-participation-a">
+<a href="#section-8.3" class="section-number selfRef">8.3. </a><a href="#name-stake-based-participation-a" class="section-name selfRef">Stake-Based Participation and Accountability</a>
+        </h3>
+<p id="section-8.3-1">ODSI employs stake-based participation as a foundational mechanism for accountability and Sybil resistance. To serve inference requests, participants are required to lock a quantity of economic value as stake, which acts as collateral against misbehavior.<a href="#section-8.3-1" class="pilcrow">¶</a></p>
+<p id="section-8.3-2">Stake introduces a real economic cost to participation and creates persistent consequences for incorrect or unreliable behavior. When misbehavior is verified—such as incorrect execution, commitment violations, or repeated deadline failures—stake may be partially or fully forfeited according to predefined rules.<a href="#section-8.3-2" class="pilcrow">¶</a></p>
+<p id="section-8.3-3">Stake directly enables accountability by ensuring that identities are bound to economic risk. It also provides an economic basis for Sybil resistance: while identities are inexpensive to create, meaningful participation and influence require proportional stake. As a result, large-scale Sybil attacks require substantial capital commitment and expose the adversary to high risk of loss.<a href="#section-8.3-3" class="pilcrow">¶</a></p>
+<p id="section-8.3-4">The influence and opportunities afforded to a participant may be proportional to both locked stake and historical performance. This ensures that influence reflects sustained contribution rather than identity count alone.<a href="#section-8.3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="accountability-without-trusted-parties">
+<section id="section-8.4">
+        <h3 id="name-accountability-without-trus">
+<a href="#section-8.4" class="section-number selfRef">8.4. </a><a href="#name-accountability-without-trus" class="section-name selfRef">Accountability Without Trusted Parties</a>
+        </h3>
+<p id="section-8.4-1">The framework is designed to provide accountability without assuming trusted coordinators, validators, or execution environments. Accountability is achieved by combining identity-bound actions with verifiable evidence and enforceable consequences.<a href="#section-8.4-1" class="pilcrow">¶</a></p>
+<p id="section-8.4-2">When misbehavior is detected, responsibility can be attributed to specific identities based on signed execution records. Consequences, such as penalties or exclusion from future participation, can then be applied according to defined rules.<a href="#section-8.4-2" class="pilcrow">¶</a></p>
+<p id="section-8.4-3">This design ensures that participants are held accountable for their actions while preserving open participation and decentralization. Trust is replaced by verification and consequence, allowing the system to operate securely in adversarial environments.<a href="#section-8.4-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="incentives-and-economic-considerations">
+<section id="section-9">
+      <h2 id="name-incentives-and-economic-con">
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-incentives-and-economic-con" class="section-name selfRef">Incentives and Economic Considerations</a>
+      </h2>
+<p id="section-9-1">ODSI operates in an open environment where participation is voluntary and participants are assumed to act in their own interest. As a result, correct and timely execution cannot be assumed to arise from cooperation alone. This section outlines the economic mechanisms that align participant incentives with system objectives, ensuring reliable execution under decentralized operation.<a href="#section-9-1" class="pilcrow">¶</a></p>
+<div id="motivation-for-incentive-mechanisms">
+<section id="section-9.1">
+        <h3 id="name-motivation-for-incentive-me">
+<a href="#section-9.1" class="section-number selfRef">9.1. </a><a href="#name-motivation-for-incentive-me" class="section-name selfRef">Motivation for Incentive Mechanisms</a>
+        </h3>
+<p id="section-9.1-1">In a decentralized inference environment, participants contribute compute, memory, and network resources that incur real costs. Without explicit incentives, participants may decline execution assignments, deprioritize inference workloads, or abandon execution paths when conditions become unfavorable.<a href="#section-9.1-1" class="pilcrow">¶</a></p>
+<p id="section-9.1-2">ODSI therefore associates inference execution with explicit economic rewards <span>[<a href="#Bitcoin" class="cite xref">Bitcoin</a>]</span>. Each successfully executed layer earns a payment, creating a direct linkage between contributed work and compensation. Reward levels may vary based on execution conditions, including:<a href="#section-9.1-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-9.1-3.1">
+            <p id="section-9.1-3.1.1">Tighter execution deadlines, which impose higher performance requirements,<a href="#section-9.1-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.1-3.2">
+            <p id="section-9.1-3.2.1">Placement on latency-critical or bottleneck segments of an execution path,<a href="#section-9.1-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.1-3.3">
+            <p id="section-9.1-3.3.1">Historical reliability and performance of the executing participant.<a href="#section-9.1-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-9.1-4">By rewarding each completed execution unit, ODSI enables fine-grained accounting and encourages participants to contribute resources proportionally to their capabilities.<a href="#section-9.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="costly-misbehavior-and-deterrence">
+<section id="section-9.2">
+        <h3 id="name-costly-misbehavior-and-dete">
+<a href="#section-9.2" class="section-number selfRef">9.2. </a><a href="#name-costly-misbehavior-and-dete" class="section-name selfRef">Costly Misbehavior and Deterrence</a>
+        </h3>
+<p id="section-9.2-1">For incentives to be effective, misbehavior must be economically disadvantageous. ODSI assumes that participants may behave strategically, including submitting incorrect activation outputs, violating execution commitments, or missing assigned deadlines.<a href="#section-9.2-1" class="pilcrow">¶</a></p>
+<p id="section-9.2-2">Misbehavior triggers penalties through the control path. Slashing events may occur in response to:<a href="#section-9.2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-9.2-3.1">
+            <p id="section-9.2-3.1.1">Incorrect or invalid activation outputs,<a href="#section-9.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.2-3.2">
+            <p id="section-9.2-3.2.1">Mismatches between committed execution inputs and revealed results,<a href="#section-9.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.2-3.3">
+            <p id="section-9.2-3.3.1">Failure to meet agreed execution deadlines.<a href="#section-9.2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-9.2-4">Penalties are calibrated to exceed the expected gains from cheating or shirking, ensuring that rational participants cannot profit from misbehavior even if detection is probabilistic. Slashing may involve forfeiture of locked stake, loss of accrued rewards, or other economically meaningful consequences.<a href="#section-9.2-4" class="pilcrow">¶</a></p>
+<p id="section-9.2-5">Penalties are applied only when sufficient cryptographic and execution evidence exists to attribute responsibility to a specific identity. This ensures that deterrence is precise and does not require centralized trust or continuous supervision.<a href="#section-9.2-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="reputation-and-long-term-participation">
+<section id="section-9.3">
+        <h3 id="name-reputation-and-long-term-pa">
+<a href="#section-9.3" class="section-number selfRef">9.3. </a><a href="#name-reputation-and-long-term-pa" class="section-name selfRef">Reputation and Long-Term Participation</a>
+        </h3>
+<p id="section-9.3-1">While per-layer payments and penalties shape short-term behavior, long-term reliability is reinforced through reputation mechanisms. Reputation reflects a participant’s historical performance across multiple dimensions, including:<a href="#section-9.3-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-9.3-2.1">
+            <p id="section-9.3-2.1.1">Deadline adherence rate,<a href="#section-9.3-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.3-2.2">
+            <p id="section-9.3-2.2.1">Output correctness and consistency,<a href="#section-9.3-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.3-2.3">
+            <p id="section-9.3-2.3.1">Availability and responsiveness,<a href="#section-9.3-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-9.3-2.4">
+            <p id="section-9.3-2.4.1">Sustained execution throughput over time.<a href="#section-9.3-2.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-9.3-3">Reputation directly influences future participation opportunities. Participants with strong reputations may receive higher task volumes, preferential assignment to latency-critical execution paths, higher reward rates, or access to tighter deadlines. Conversely, participants with poor or unstable reputations may receive fewer assignments, reduced compensation, or eventual exclusion.<a href="#section-9.3-3" class="pilcrow">¶</a></p>
+<p id="section-9.3-4">Reputation complements direct economic incentives by encouraging sustained, honest participation across many execution sessions. Together, per-layer rewards, slashing-based deterrence, and reputation-driven coordination create a self-reinforcing environment in which rational participants are motivated to behave reliably, enabling scalable and decentralized inference execution.<a href="#section-9.3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="inference-path-and-control-path-separation">
+<section id="section-10">
+      <h2 id="name-inference-path-and-control-">
+<a href="#section-10" class="section-number selfRef">10. </a><a href="#name-inference-path-and-control-" class="section-name selfRef">Inference Path and Control Path Separation</a>
+      </h2>
+<p id="section-10-1">ODSI separates inference execution into an inference path and a control path in order to reconcile strict latency requirements with the need for security, accountability, and open participation (analogy to Lightning <span>[<a href="#Lightning" class="cite xref">Lightning</a>]</span>). The inference path is responsible for latency-critical execution and data movement required to generate inference outputs. The control path is responsible for identity management, economic coordination, verification, and enforcement. Together, they form a coherent architecture that decouples performance-sensitive execution from governance and accountability functions.<a href="#section-10-1" class="pilcrow">¶</a></p>
+<div id="design-rationale">
+<section id="section-10.1">
+        <h3 id="name-design-rationale">
+<a href="#section-10.1" class="section-number selfRef">10.1. </a><a href="#name-design-rationale" class="section-name selfRef">Design Rationale</a>
+        </h3>
+<p id="section-10.1-1">Interactive inference requires execution progress within tight and predictable time bounds. Operations such as cryptographic identity registration, stake management, global verification, or reward settlement cannot be placed directly on the critical execution path without violating these constraints.<a href="#section-10.1-1" class="pilcrow">¶</a></p>
+<p id="section-10.1-2">At the same time, an open and decentralized environment requires mechanisms to deter misbehavior, attribute responsibility, and enforce incentives. These mechanisms inherently involve coordination, state persistence, and potentially delayed resolution.<a href="#section-10.1-2" class="pilcrow">¶</a></p>
+<p id="section-10.1-3">The separation between the inference path and the control path addresses this tension by allowing inference execution to proceed optimistically and independently, while ensuring that execution remains observable, attributable, and enforceable. Lightweight checks on the inference path reduce the likelihood that incorrect results propagate to users, while the control path provides definitive validation, economic settlement, and long-term accountability.<a href="#section-10.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="inference-path-execution-properties">
+<section id="section-10.2">
+        <h3 id="name-inference-path-execution-pr">
+<a href="#section-10.2" class="section-number selfRef">10.2. </a><a href="#name-inference-path-execution-pr" class="section-name selfRef">Inference Path Execution Properties</a>
+        </h3>
+<p id="section-10.2-1">The inference path carries all latency-critical activities required for inference execution. This includes:<a href="#section-10.2-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-10.2-2.1">
+            <p id="section-10.2-2.1.1">Layer-wise computation across participating nodes,<a href="#section-10.2-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.2-2.2">
+            <p id="section-10.2-2.2.1">Transport of intermediate activations and execution state,<a href="#section-10.2-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.2-2.3">
+            <p id="section-10.2-2.3.1">Routing and re-routing decisions based on network and execution conditions,<a href="#section-10.2-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.2-2.4">
+            <p id="section-10.2-2.4.1">Failure detection and signaling to enable timely recovery.<a href="#section-10.2-2.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-10.2-3">The inference path is optimized for low latency, minimal coordination overhead, and predictable progress under Internet variability.<a href="#section-10.2-3" class="pilcrow">¶</a></p>
+<p id="section-10.2-4">Inference path execution is optimistic but constrained. Participants are not blindly trusted, and incorrect execution is mitigated through the following mechanisms:<a href="#section-10.2-4" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-10.2-5.1">
+            <p id="section-10.2-5.1.1">Execution commitments: Participants commit to execution inputs, layer identifiers, and deadlines before revealing outputs, preventing adaptive or inconsistent behavior.<a href="#section-10.2-5.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.2-5.2">
+            <p id="section-10.2-5.2.1">Selective redundancy: For high-impact layers or execution steps, multiple participants may perform the same computation, allowing mismatches to be detected through lightweight comparison.<a href="#section-10.2-5.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.2-5.3">
+            <p id="section-10.2-5.3.1">State-local execution: Execution path affinity minimizes state transfer and confines errors to limited execution segments.<a href="#section-10.2-5.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-10.2-6">These mechanisms allow many incorrect executions to be detected within the same token step or shortly thereafter, enabling rapid fallback or localized re-execution before incorrect results propagate to the user.<a href="#section-10.2-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="control-path-functions-and-enforcement">
+<section id="section-10.3">
+        <h3 id="name-control-path-functions-and-">
+<a href="#section-10.3" class="section-number selfRef">10.3. </a><a href="#name-control-path-functions-and-" class="section-name selfRef">Control Path Functions and Enforcement</a>
+        </h3>
+<p id="section-10.3-1">The control path operates asynchronously and is responsible for system-wide coordination and accountability. Its functions include, but are not limited to:<a href="#section-10.3-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-10.3-2.1">
+            <p id="section-10.3-2.1.1">Cryptographic identity registration and authentication,<a href="#section-10.3-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.3-2.2">
+            <p id="section-10.3-2.2.1">Stake locking, management, and release,<a href="#section-10.3-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.3-2.3">
+            <p id="section-10.3-2.3.1">Validation of execution commitments and revealed results,<a href="#section-10.3-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.3-2.4">
+            <p id="section-10.3-2.4.1">Slashing decisions for incorrect execution or missed deadlines,<a href="#section-10.3-2.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.3-2.5">
+            <p id="section-10.3-2.5.1">Reward calculation and settlement,<a href="#section-10.3-2.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-10.3-2.6">
+            <p id="section-10.3-2.6.1">Maintenance of long-term reputation or eligibility signals.<a href="#section-10.3-2.6.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-10.3-3">Because control path operations are not latency-critical, they can perform thorough verification and policy enforcement without delaying inference execution. Control path decisions are driven by signed execution records and verifiable evidence produced during inference path execution.<a href="#section-10.3-3" class="pilcrow">¶</a></p>
+<p id="section-10.3-4">While some violations may be detected only after inference has progressed or completed, economic deterrence and reputational consequences make sustained misbehavior irrational for participants seeking long-term participation.<a href="#section-10.3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="bounded-risk-and-practical-correctness">
+<section id="section-10.4">
+        <h3 id="name-bounded-risk-and-practical-">
+<a href="#section-10.4" class="section-number selfRef">10.4. </a><a href="#name-bounded-risk-and-practical-" class="section-name selfRef">Bounded Risk and Practical Correctness</a>
+        </h3>
+<p id="section-10.4-1">The separation between the inference path and the control path introduces bounded risk rather than absolute prevention of incorrect execution. However, the combination of early detection on the inference path, rapid fallback mechanisms, and strong economic deterrence on the control path ensures that incorrect results are rare, localized, and unlikely to persist undetected.<a href="#section-10.4-1" class="pilcrow">¶</a></p>
+<p id="section-10.4-2">This design follows a well-established distributed systems principle: optimistic execution combined with eventual verification. ODSI applies this principle to open and decentralized inference, enabling high-throughput, low-latency execution while preserving accountability and system integrity.<a href="#section-10.4-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="scalability-and-deployment-considerations">
+<section id="section-11">
+      <h2 id="name-scalability-and-deployment-">
+<a href="#section-11" class="section-number selfRef">11. </a><a href="#name-scalability-and-deployment-" class="section-name selfRef">Scalability and Deployment Considerations</a>
+      </h2>
+<p id="section-11-1">ODSI is designed to scale across large numbers of independently operated participants and to operate under dynamic network and resource conditions. This section discusses considerations related to open participation, participant churn, and long-term extensibility of the framework.<a href="#section-11-1" class="pilcrow">¶</a></p>
+<div id="open-membership-and-sybil-resistance">
+<section id="section-11.1">
+        <h3 id="name-open-membership-and-sybil-r">
+<a href="#section-11.1" class="section-number selfRef">11.1. </a><a href="#name-open-membership-and-sybil-r" class="section-name selfRef">Open Membership and Sybil Resistance</a>
+        </h3>
+<p id="section-11.1-1">ODSI supports open membership, allowing any participant to contribute computational resources without requiring centralized admission or prior trust relationships. This openness is essential for elastic scaling and for harnessing widely distributed and heterogeneous compute capacity.<a href="#section-11.1-1" class="pilcrow">¶</a></p>
+<p id="section-11.1-2">However, open membership introduces the risk that a single entity may create many identities to gain disproportionate influence or rewards. To mitigate this risk, ODSI relies on Sybil-resistance mechanisms implemented within the control plane, where Sybil resistance can only be achieved economically rather than administratively. While identity creation is unrestricted, meaningful participation requires stake-backed commitment. Stake ensures that influence, task volume, and rewards are proportional to economic risk and historical performance rather than identity count.<a href="#section-11.1-2" class="pilcrow">¶</a></p>
+<p id="section-11.1-3">This approach preserves openness while preventing adversaries from cheaply amplifying influence through large numbers of identities. Large-scale Sybil attacks require correspondingly large capital commitments and carry a high risk of economic loss.<a href="#section-11.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="growth-and-churn">
+<section id="section-11.2">
+        <h3 id="name-growth-and-churn">
+<a href="#section-11.2" class="section-number selfRef">11.2. </a><a href="#name-growth-and-churn" class="section-name selfRef">Growth and Churn</a>
+        </h3>
+<p id="section-11.2-1">Participants in ODSI may join or leave the system at any time, either intentionally or due to failures, mobility, or network conditions. The framework assumes continuous churn and does not require long-lived availability from individual participants.<a href="#section-11.2-1" class="pilcrow">¶</a></p>
+<p id="section-11.2-2">Scalability under churn is achieved by:<a href="#section-11.2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-11.2-3.1">
+            <p id="section-11.2-3.1.1">Decentralized participant discovery and coordination,<a href="#section-11.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.2-3.2">
+            <p id="section-11.2-3.2.1">Adaptive assignment of inference execution based on observed availability and performance,<a href="#section-11.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.2-3.3">
+            <p id="section-11.2-3.3.1">Conservative state migration and localized recovery when execution paths change.<a href="#section-11.2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-11.2-4">The inference plane prioritizes timely progress in the presence of transient failures, while the control plane provides longer-term stability by discouraging unreliable behavior through economic and reputational consequences. Together, these mechanisms allow the system to scale with participation while remaining robust under dynamic conditions.<a href="#section-11.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="interoperability-and-extensibility">
+<section id="section-11.3">
+        <h3 id="name-interoperability-and-extens">
+<a href="#section-11.3" class="section-number selfRef">11.3. </a><a href="#name-interoperability-and-extens" class="section-name selfRef">Interoperability and Extensibility</a>
+        </h3>
+<p id="section-11.3-1">ODSI is defined as an architectural framework rather than a single monolithic protocol. It is intended to accommodate multiple protocol instantiations, execution environments, and incentive mechanisms.<a href="#section-11.3-1" class="pilcrow">¶</a></p>
+<p id="section-11.3-2">Interoperability is supported by:<a href="#section-11.3-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-11.3-3.1">
+            <p id="section-11.3-3.1.1">Clear separation between inference execution and verification functions,<a href="#section-11.3-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.3-3.2">
+            <p id="section-11.3-3.2.1">Well-defined interfaces between planes,<a href="#section-11.3-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-11.3-3.3">
+            <p id="section-11.3-3.3.1">Use of cryptographic primitives and message formats that can be standardized independently.<a href="#section-11.3-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-11.3-4">Extensibility is a key design goal. New execution strategies, verification techniques, or incentive schemes can be introduced without disrupting existing deployments, provided they respect the framework’s core principles. This modularity allows ODSI to evolve alongside advances in inference techniques, hardware capabilities, and decentralized coordination mechanisms.<a href="#section-11.3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="privacy-considerations">
+<section id="section-12">
+      <h2 id="name-privacy-considerations">
+<a href="#section-12" class="section-number selfRef">12. </a><a href="#name-privacy-considerations" class="section-name selfRef">Privacy Considerations</a>
+      </h2>
+<p id="section-12-1">Inference execution in ODSI involves the transmission of user-provided inputs and intermediate activations across independently operated participants. By default, the framework does not provide confidentiality guarantees for such data beyond transport-level protection.<a href="#section-12-1" class="pilcrow">¶</a></p>
+<p id="section-12-2">Decentralized execution may reduce the need to transmit user data to centralized endpoints and can enable computation to occur closer to data sources. However, distributing execution across multiple participants may also increase the number of entities that observe portions of the execution state.<a href="#section-12-2" class="pilcrow">¶</a></p>
+<p id="section-12-3">Privacy risks include exposure of user inputs, partial activations, execution patterns, or metadata such as timing and routing information. These risks vary depending on deployment context, participant selection policies, and execution strategies.<a href="#section-12-3" class="pilcrow">¶</a></p>
+<p id="section-12-4">ODSI is designed to be compatible with additional privacy-enhancing mechanisms, including data minimization, execution on trusted hardware, encrypted computation, or differential privacy techniques. Such mechanisms are considered out of scope for this document but may be incorporated by specific protocol instantiations or deployment profiles.<a href="#section-12-4" class="pilcrow">¶</a></p>
+<p id="section-12-5">Operators and users should carefully evaluate privacy requirements and select appropriate configurations and extensions when deploying ODSI in sensitive environments.<a href="#section-12-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="relationship-to-existing-work">
+<section id="section-13">
+      <h2 id="name-relationship-to-existing-wo">
+<a href="#section-13" class="section-number selfRef">13. </a><a href="#name-relationship-to-existing-wo" class="section-name selfRef">Relationship to Existing Work</a>
+      </h2>
+<p id="section-13-1">ODSI draws inspiration from multiple areas of distributed systems and decentralized computing, while addressing challenges that are specific to large-scale, interactive inference workloads.<a href="#section-13-1" class="pilcrow">¶</a></p>
+<p id="section-13-2">Centralized inference platforms provide tightly optimized execution but rely on trusted operators and centralized infrastructure. ODSI departs from this model by enabling open participation and decentralized execution while preserving interactivity.<a href="#section-13-2" class="pilcrow">¶</a></p>
+<p id="section-13-3">Prior work on distributed machine learning focuses primarily on training or batch-oriented computation, where execution is less sensitive to strict per-step latency and state continuity. In contrast, ODSI targets online inference with strong sequential dependencies and deadline constraints.<a href="#section-13-3" class="pilcrow">¶</a></p>
+<p id="section-13-4">Peer-to-peer and decentralized computation frameworks enable open resource contribution but typically assume best-effort execution or stateless tasks. ODSI extends these ideas by incorporating stateful execution, deadline awareness, and economic accountability.<a href="#section-13-4" class="pilcrow">¶</a></p>
+<p id="section-13-5">Blockchain and decentralized ledger systems provide mechanisms for identity, verification, and incentive alignment, but are generally unsuitable for latency-critical execution. ODSI adopts similar accountability principles while decoupling execution from verification to meet performance requirements.<a href="#section-13-5" class="pilcrow">¶</a></p>
+<p id="section-13-6">By integrating concepts from these domains, ODSI defines a distinct architectural approach for open, decentralized inference that complements rather than replaces existing systems.<a href="#section-13-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="acknowledgments">
+<section id="section-14">
+      <h2 id="name-acknowledgments">
+<a href="#section-14" class="section-number selfRef">14. </a><a href="#name-acknowledgments" class="section-name selfRef">Acknowledgments</a>
+      </h2>
+<p id="section-14-1">The authors would like to thank colleagues and reviewers in the community who provided feedback on the early version of this draft.<a href="#section-14-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-combined-references">
+<section id="section-15">
+      <h2 id="name-references">
+<a href="#section-15" class="section-number selfRef">15. </a><a href="#name-references" class="section-name selfRef">References</a>
+      </h2>
+<div id="sec-normative-references">
+<section id="section-15.1">
+        <h3 id="name-normative-references">
+<a href="#section-15.1" class="section-number selfRef">15.1. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+        </h3>
+<dl class="references">
+<dt id="RFC6979">[RFC6979]</dt>
+      <dd>
+<span class="refAuthor">Pornin, T.</span>, <span class="refTitle">"Deterministic Usage of the Digital Signature Algorithm (DSA) and Elliptic Curve Digital Signature Algorithm (ECDSA)"</span>, <span class="seriesInfo">RFC 6979</span>, <span class="seriesInfo">DOI 10.17487/RFC6979</span>, <time datetime="2013-08" class="refDate">August 2013</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc6979">https://www.rfc-editor.org/rfc/rfc6979</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="sec-informative-references">
+<section id="section-15.2">
+        <h3 id="name-informative-references">
+<a href="#section-15.2" class="section-number selfRef">15.2. </a><a href="#name-informative-references" class="section-name selfRef">Informative References</a>
+        </h3>
+<dl class="references">
+<dt id="Bitcoin">[Bitcoin]</dt>
+        <dd>
+<span class="refAuthor">Nakamoto, S.</span>, <span class="refTitle">"Bitcoin: A peer-to-peer electronic cash system"</span>, <time datetime="2008" class="refDate">2008</time>. </dd>
+<dd class="break"></dd>
+<dt id="Byzantine">[Byzantine]</dt>
+        <dd>
+<span class="refAuthor">Castro, M.</span> and <span class="refAuthor">B. Liskov</span>, <span class="refTitle">"Practical byzantine fault tolerance"</span>, <span class="refContent">OSDI</span>, <time datetime="1999-02" class="refDate">February 1999</time>, <span>&lt;<a href="https://www.usenix.org/legacy/publications/library/proceedings/osdi99/full_papers/castro/castro.ps">https://www.usenix.org/legacy/publications/library/proceedings/osdi99/full_papers/castro/castro.ps</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="Lightning">[Lightning]</dt>
+      <dd>
+<span class="refAuthor">Joseph Poon</span> and <span class="refAuthor">T. Dryja</span>, <span class="refTitle">"The bitcoin lightning network: Scalable off-chain instant payments"</span>, <time datetime="2008" class="refDate">2008</time>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+</section>
+</div>
+<div id="authors-addresses">
+<section id="appendix-A">
+      <h2 id="name-authors-addresses">
+<a href="#name-authors-addresses" class="section-name selfRef">Authors' Addresses</a>
+      </h2>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Hanling Wang</span></div>
+<div dir="auto" class="left"><span class="org">Pengcheng Laboratory</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:wanghl03@pcl.ac.cn" class="email">wanghl03@pcl.ac.cn</a>
+</div>
+</address>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Qing Li</span></div>
+<div dir="auto" class="left"><span class="org">Pengcheng Laboratory</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:liq@pcl.ac.cn" class="email">liq@pcl.ac.cn</a>
+</div>
+</address>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Yong Jiang</span></div>
+<div dir="auto" class="left"><span class="org">Tsinghua Shenzhen International Graduate School &amp; Pengcheng Laboratory</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:jiangy@sz.tsinghua.edu.cn" class="email">jiangy@sz.tsinghua.edu.cn</a>
+</div>
+</address>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Mingwei Xu</span></div>
+<div dir="auto" class="left"><span class="org">Tsinghua University</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:xumw@tsinghua.edu.cn" class="email">xumw@tsinghua.edu.cn</a>
+</div>
+</address>
+</section>
+</div>
+<script>const toc = document.getElementById("toc");
+toc.querySelector("h2").addEventListener("click", e => {
+  toc.classList.toggle("active");
+});
+toc.querySelector("nav").addEventListener("click", e => {
+  toc.classList.remove("active");
+});
+</script>
+</body>
+</html>
