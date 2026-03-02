@@ -14,7 +14,7 @@ Expires: 3 September 2026                                       Y. Jiang
 
 An Open, Decentralized, and Scalable Framework for Large Language Model
                                Inference
-                 draft-wang-cats-innetwork-infer-latest
+                      draft-wang-cats-odsi-latest
 
 Abstract
 
@@ -51,10 +51,9 @@ About This Document
    This note is to be removed before publishing as an RFC.
 
    The latest revision of this draft can be found at
-   https://kongyanye.github.io/draft-wang-cats-innetwork-infer/draft-
-   wang-cats-innetwork-infer.html.  Status information for this document
-   may be found at https://datatracker.ietf.org/doc/draft-wang-cats-
-   innetwork-infer/.
+   https://kongyanye.github.io/draft-wang-cats-odsi/draft-wang-cats-
+   odsi.html.  Status information for this document may be found at
+   https://datatracker.ietf.org/doc/draft-wang-cats-odsi/.
 
    Discussion of this document takes place on the Computing-Aware
    Traffic Steering Working Group mailing list (mailto:cats@ietf.org),
@@ -62,7 +61,7 @@ About This Document
    Subscribe at https://www.ietf.org/mailman/listinfo/cats/.
 
    Source for this draft and an issue tracker can be found at
-   https://github.com/kongyanye/draft-wang-cats-innetwork-infer.
+   https://github.com/kongyanye/draft-wang-cats-odsi.
 
 Status of This Memo
 
