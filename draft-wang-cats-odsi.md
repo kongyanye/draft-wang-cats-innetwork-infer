@@ -53,7 +53,7 @@ informative:
   Bitcoin:
     title: "Bitcoin: A peer-to-peer electronic cash system"
     author:
-      - 
+      -
         ins: S. Nakamoto
         name: Satoshi Nakamoto
     date: 2008
@@ -63,17 +63,17 @@ informative:
       -
         ins: Joseph Poon
         name: J. Poon
-      - 
+      -
         ins: T. Dryja
         name: Thaddeus Dryja
     date: 2008
   Byzantine:
     title: "Practical byzantine fault tolerance"
     author:
-      - 
+      -
         ins: M. Castro
         name: Miguel Castro
-      - 
+      -
         ins: B. Liskov
         name: Barbara Liskov
     date: 1999-02
