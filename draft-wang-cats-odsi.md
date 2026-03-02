@@ -21,8 +21,8 @@ venue:
   type: "Working Group"
   mail: "cats@ietf.org"
   arch: "https://mailarchive.ietf.org/arch/browse/cats/"
-  # github: "kongyanye/draft-wang-cats-innetwork-infer"
-  # latest: "https://kongyanye.github.io/draft-wang-cats-innetwork-infer/draft-wang-cats-innetwork-infer.html"
+  github: "kongyanye/draft-wang-cats-odsi"
+  latest: "https://kongyanye.github.io/draft-wang-cats-odsi/draft-wang-cats-odsi.html"
 
 author:
  -

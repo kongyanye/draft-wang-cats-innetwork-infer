@@ -1,8 +1,8 @@
 <!-- regenerate: off (set to off if you edit this file) -->
 
-# In-Network Intelligence for Distributed Collaborative Inference Acceleration
+# An Open, Decentralized, and Scalable Framework for Large Language Model Inference
 
-This is the working area for the individual Internet-Draft, "In-Network Intelligence for Distributed Collaborative Inference Acceleration".
+This is the working area for the individual Internet-Draft, "An Open, Decentralized, and Scalable Framework for Large Language Model Inference".
 
 * [Editor's Copy](https://kongyanye.github.io/draft-wang-cats-innetwork-infer/#go.draft-wang-cats-innetwork-infer.html)
 * [Datatracker Page](https://datatracker.ietf.org/doc/draft-wang-cats-innetwork-infer)
